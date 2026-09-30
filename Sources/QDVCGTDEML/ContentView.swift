@@ -60,16 +60,23 @@ struct MainSplitView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 340)
         } detail: {
-            Group {
-                if model.isSearching || (model.sidebarSelection?.isMailbox ?? true) {
-                    MailboxView()
-                } else if model.sidebarSelection == .performance {
-                    PerformanceView()
-                } else {
-                    DashboardView()
+            // The banners sit in the layout above the content, not in a
+            // safe-area inset: HSplitView (AppKit's NSSplitView) ignores
+            // SwiftUI's insets, so an inset banner would overlap the list's
+            // title and slide up under the toolbar.
+            VStack(spacing: 0) {
+                BannerStack()
+                Group {
+                    if model.isSearching || (model.sidebarSelection?.isMailbox ?? true) {
+                        MailboxView()
+                    } else if model.sidebarSelection == .performance {
+                        PerformanceView()
+                    } else {
+                        DashboardView()
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { BannerStack() }
         }
         .searchable(text: $model.searchText, placement: .toolbar, prompt: Text("Search all folders"))
         .toolbar { toolbarContent }
@@ -217,7 +224,9 @@ struct Banner: View {
         .font(.callout)
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(tint.opacity(0.10))
+        // A colour background would otherwise extend into the safe area,
+        // i.e. up behind the toolbar and window title.
+        .background(tint.opacity(0.10), ignoresSafeAreaEdges: [])
         .overlay(alignment: .bottom) { Divider() }
     }
 }
