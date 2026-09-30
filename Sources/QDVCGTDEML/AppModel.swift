@@ -80,7 +80,10 @@ final class AppModel {
 
     var sidebarSelection: SidebarItem? = .folder(.triage) {
         didSet {
-            if oldValue != sidebarSelection { keepSelectionVisible() }
+            guard oldValue != sidebarSelection else { return }
+            // Choosing a sidebar entry ends a search, as in Mail.
+            if sidebarSelection != nil && !searchText.isEmpty { searchText = "" }
+            keepSelectionVisible()
         }
     }
     var selection: Set<String> = [] {

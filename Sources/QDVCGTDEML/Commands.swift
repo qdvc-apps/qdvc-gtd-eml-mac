@@ -5,8 +5,9 @@ import GTDCore
 /// Menu-bar commands. Standard items (Edit, Window, Help, Settings…, Quit,
 /// Hide) come from the system; these add the workspace, view, message and
 /// workflow actions.
+@MainActor
 struct GTDCommands: Commands {
-    let model: AppModel
+    @Bindable var model: AppModel
 
     var body: some Commands {
         SidebarCommands()
@@ -52,14 +53,15 @@ struct GTDCommands: Commands {
                 .keyboardShortcut("7")
                 .disabled(model.workspace == nil)
             Divider()
-            Toggle("Show Date Headings", isOn: Binding(get: { model.showDateHeadings },
-                                                       set: { model.showDateHeadings = $0 }))
+            Toggle("Show Date Headings", isOn: $model.showDateHeadings)
             Menu("Sort By") {
-                ForEach(SortKey.allCases) { key in
-                    Toggle(key.title, isOn: Binding(get: { model.sortKey == key }, set: { if $0 { model.sortKey = key } }))
+                Picker("Sort By", selection: $model.sortKey) {
+                    ForEach(SortKey.allCases) { Text($0.title).tag($0) }
                 }
+                .pickerStyle(.inline)
+                .labelsHidden()
                 Divider()
-                Toggle("Ascending", isOn: Binding(get: { model.sortAscending }, set: { model.sortAscending = $0 }))
+                Toggle("Ascending", isOn: $model.sortAscending)
             }
             Divider()
             Button("Refresh") { model.refresh() }
@@ -123,7 +125,7 @@ struct GTDCommands: Commands {
     }
 
     private func go(_ item: SidebarItem) {
-        model.searchText = ""
         model.sidebarSelection = item
+        model.searchText = ""
     }
 }

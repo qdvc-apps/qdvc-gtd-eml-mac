@@ -8,11 +8,7 @@ struct SidebarView: View {
 
     var body: some View {
         @Bindable var model = model
-        List(selection: Binding(get: { model.sidebarSelection },
-                                set: { item in
-                                    model.sidebarSelection = item
-                                    if item != nil { model.searchText = "" }
-                                })) {
+        List(selection: $model.sidebarSelection) {
             Section("Overview") {
                 row(.dashboard, "Dashboard", "square.grid.2x2", badge: false)
                 row(.performance, "Performance", "chart.xyaxis.line", badge: false)

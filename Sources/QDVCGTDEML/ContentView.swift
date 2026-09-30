@@ -93,9 +93,11 @@ struct MailboxView: View {
     }
 }
 
-/// The window's toolbar items (built by `MainSplitView`).
+/// The window's toolbar items (built by `MainSplitView`). Main-actor
+/// isolated like a view's body, since it reads the model.
+@MainActor
 struct MainToolbar {
-    let model: AppModel
+    @Bindable var model: AppModel
 
     @ToolbarContentBuilder
     var content: some ToolbarContent {
@@ -150,13 +152,12 @@ struct MainToolbar {
             .disabled(!model.selectedRecords.contains { $0.folder != .input })
 
             Menu {
-                Picker("Sort By", selection: Binding(get: { model.sortKey }, set: { model.sortKey = $0 })) {
+                Picker("Sort By", selection: $model.sortKey) {
                     ForEach(SortKey.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.inline)
-                Toggle("Ascending", isOn: Binding(get: { model.sortAscending }, set: { model.sortAscending = $0 }))
-                Toggle("Show Date Headings", isOn: Binding(get: { model.showDateHeadings },
-                                                           set: { model.showDateHeadings = $0 }))
+                Toggle("Ascending", isOn: $model.sortAscending)
+                Toggle("Show Date Headings", isOn: $model.showDateHeadings)
             } label: {
                 Label("Sort", systemImage: "arrow.up.arrow.down")
             }
