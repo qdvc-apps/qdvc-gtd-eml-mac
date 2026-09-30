@@ -138,8 +138,8 @@ Also:
 
 - **General:** date format (the web UI's three), time zone for `.eml` dates
   (system by default), how to read quoted headers with no zone, which folders
-  are *on radar* (the Smart Mailboxes and Inbox/Sent views cover only these;
-  default Input, Triage, Actionable, Delegated), whether off-radar mail is
+  are *on radar* (the Smart Mailboxes cover only these, while Inbox and Sent
+  always cover every folder; default Input, Triage, Actionable, Delegated), whether off-radar mail is
   dimmed, and whether to reopen the last workspace.
 - **Workspace:** a read-only summary of the workspace's `workspace.yml`
   (`my_own_accounts`, `monitored_hashtags`, the age thresholds and

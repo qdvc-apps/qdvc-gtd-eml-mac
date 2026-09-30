@@ -81,7 +81,7 @@ enum Prefs {
 
     static let defaultRadar: [Folder] = [.input, .triage, .actionable, .delegated]
 
-    /// The folders the smart mailboxes and account views cover.
+    /// The folders the smart mailboxes cover (the account views cover all).
     static var radarFolders: Set<Folder> {
         get {
             guard let raw = defaults.stringArray(forKey: Key.radarFolders) else { return Set(defaultRadar) }

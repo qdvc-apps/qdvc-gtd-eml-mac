@@ -50,7 +50,7 @@ private struct GeneralSettings: View {
             } header: {
                 Text("On the radar")
             } footer: {
-                Text("Smart Mailboxes and the Inbox/Sent views only list emails in these folders.")
+                Text("Smart Mailboxes only list emails in these folders. Inbox and Sent always cover every folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

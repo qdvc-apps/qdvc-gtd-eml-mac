@@ -177,15 +177,14 @@ final class AppModel {
             return records.filter { isOnRadar($0) && $0.isPinned }
         case .hashtag(let tag):
             return records.filter { isOnRadar($0) && $0.mentions(tag) }
+        // The account views cover every folder, regardless of the radar.
         case .inbox(let account):
             return records.filter { r in
-                isOnRadar(r) && (account == nil ? !r.inboxAccounts.isEmpty
-                                 : r.inboxAccounts.contains { $0.emailAddress == account })
+                account == nil ? !r.inboxAccounts.isEmpty : r.inboxAccounts.contains { $0.emailAddress == account }
             }
         case .sent(let account):
             return records.filter { r in
-                isOnRadar(r) && (account == nil ? !r.sentAccounts.isEmpty
-                                 : r.sentAccounts.contains { $0.emailAddress == account })
+                account == nil ? !r.sentAccounts.isEmpty : r.sentAccounts.contains { $0.emailAddress == account }
             }
         case .attention(let key):
             let ids = Set(overview.attention.first { $0.key == key }?.ids ?? [])
