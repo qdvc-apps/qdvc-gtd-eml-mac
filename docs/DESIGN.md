@@ -1,6 +1,8 @@
-# QDVC GTD EML for macOS — Design Proposal
+# QDVC GTD EML for macOS — Design
 
-Status: **draft, awaiting answers to the open questions in §9.**
+Status: **approved; first implementation written.** The decisions taken on the
+open questions are recorded in §9. Where the implementation differs from the
+original proposal, this document has been updated to match it.
 
 This document proposes how the macOS edition of
 [qdvc-gtd-eml](https://github.com/qdvc-apps/qdvc-gtd-eml) should look and
@@ -33,12 +35,12 @@ ad-hoc-signed bundle built by `scripts/build-app.sh`.
 
 ## 2. Window layout
 
-One window, one `NavigationSplitView` with three columns, like Mail and like
-Bibliotheca's `MainSplitView`:
+One window: a `NavigationSplitView` whose sidebar is the source list
+(collapsible with ⌃⌘S / View → Hide Sidebar) and whose detail is either
 
-1. **Sidebar** (source list, collapsible with ⌃⌘S / View → Hide Sidebar).
-2. **Message list** (the "content" column).
-3. **Reading pane** (the "detail" column).
+1. the **message list** and the **reading pane** side by side (an
+   `HSplitView`), as in Mail, or
+2. the **Dashboard** or **Performance** page, using the full width.
 
 The sidebar sections mirror the web UI's categories, relabelled with Mail's
 vocabulary:
@@ -50,9 +52,10 @@ vocabulary:
 | Smart Mailboxes | Due Date Set, No Due Date, Pinned, one per monitored hashtag | `calendar.badge.clock`, `calendar`, `pin`, `number` |
 | Accounts | per own account: Inbox and Sent (only when accounts are configured) | `envelope`, `paperplane` |
 
-Dashboard and Performance replace the list and reading pane with a single
-scrolling overview (as Bibliotheca's non-list tabs keep the split view's
-shape), so the sidebar never jumps.
+The sidebar is one instance throughout, so it never jumps. Inbox and Sent
+list every own account's mail and disclose one entry per account. Clicking a
+Dashboard figure or project opens a temporary Results entry with the emails
+it counted.
 
 ### 2.1 Message list
 
@@ -84,8 +87,9 @@ Same order as the web UI, because annotations are the point of a GTD system:
 2. **Subject** as the title.
 3. **Annotations card:** Next Action, Project (with a combo box of existing
    projects), Due Date (a date picker, plus a free-text escape hatch because
-   the CLI allows free text), Flags, and Notes. Fields are edited in place
-   and written on commit (Return, or leaving the field).
+   the CLI allows free text), Flags, and Notes. Edit (⌘E) turns the card
+   into a form in place; Save (Return) writes only the fields that changed,
+   Cancel (Esc) discards.
 4. **Workflow trail** (`ds_*` stamps) and the email's metrics, in a
    disclosure group.
 5. **Message history:** the thread split into collapsible blocks, each with
@@ -99,15 +103,15 @@ same reason as the web UI: no remote content, no sender markup.
 
 | CLI | Menu command | Toolbar | Shortcut | Mail precedent |
 | --- | --- | --- | --- | --- |
-| `list` (ingest) | Mailbox → Ingest New Files | Ingest (`tray.and.arrow.down`) | ⇧⌘N | Get All New Mail |
+| `list` (ingest) | Workflow → Ingest Input | Ingest (`tray.and.arrow.down`) | ⇧⌘N | Get All New Mail |
 | `alloc <dest>` | Message → Move To ▸ folder | Move To (menu) | ⌃⌘1 – ⌃⌘6 | Move to Favourite Mailbox |
 | `alloc archive` | Message → Archive | Archive | ⌃⌘A | Archive |
 | `close … with …` | Message → Close With… (sheet: pick the closing email) | Close With… | ⌥⌘K | — |
 | `pin` / `unpin` | Message → Pin / Unpin | Pin | ⇧⌘L | Flag |
 | `metadata set` | inline in the reading pane; Message → Edit Annotations… (⌘E) | — | ⌘E | — |
-| `workflow_autofix` | Mailbox → Review Date Stamps… (sheet listing every proposed stamp, one Apply button) | banner | — | — |
-| `metadata_check` | Mailbox → Check Metadata… (report sheet) | — | — | — |
-| `view` | Message → Open in Mail / Quick Look | — | ⌘↩ / ⌘Y | Open Message |
+| `workflow_autofix` | Workflow → Review Date Stamps… (sheet listing every proposed stamp, one Apply button) | banner | — | — |
+| `metadata_check` | Workflow → Check Metadata… (report sheet) | — | — | — |
+| `view` | Message → Open in Mail / Quick Look | — | ⌘↓ / ⌘Y | Open Message |
 | `search` | toolbar search field (all folders, including quoted text) | Search | ⌥⌘F | Mailbox Search |
 | `stats` | the sidebar counts and the Dashboard | — | — | — |
 
@@ -117,11 +121,12 @@ Also:
   is `alloc`, as dragging to a mailbox is in Mail. Dropping `.eml` files from
   Finder or Mail onto the window copies them into `01-input`.
 - **Go to folder:** ⌘1 – ⌘6 select the six Workflow folders, as ⌘1… select
-  favourite mailboxes in Mail. ⌘0 is the Dashboard.
+  favourite mailboxes in Mail. ⌘0 is the Dashboard and ⌘7 Performance.
 - **Context menus** on rows repeat the Message menu.
 - **No undo for moves.** Undoing an `alloc` would mean clearing a `ds_*`
   stamp, which nothing in the CLI ever does. Instead, moving is disabled
-  (with the reason) when it would be refused, and there is nothing to
+  when it would be refused (the context menu names the reason, e.g.
+  "Triage — Already has ds_triage = 2026-09-30"), and there is nothing to
   confirm otherwise, which matches both Mail and the CLI.
 - **Autofix banner:** when `plan_autofix` has outstanding fixes or blockers,
   a thin banner above the message list says so and offers Review…; the
@@ -131,41 +136,25 @@ Also:
 
 ## 4. Settings (⌘,)
 
-- **General:** ingest automatically when the workspace opens and on Refresh
-  (see §9), date format (the web UI's three), timezone for `.eml` dates, and
-  how to read quoted headers with no zone.
-- **Accounts and Tags:** `my_own_accounts` (address, display name, colour)
-  and `monitored_hashtags`, depending on the answer in §9.
-- **Smart Mailboxes:** which folders are *on radar*, and whether off-radar
-  mail is greyed out.
+- **General:** date format (the web UI's three), time zone for `.eml` dates
+  (system by default), how to read quoted headers with no zone, which folders
+  are *on radar* (the Smart Mailboxes and Inbox/Sent views cover only these;
+  default Input, Triage, Actionable, Delegated), whether off-radar mail is
+  dimmed, and whether to reopen the last workspace.
+- **Workspace:** a read-only summary of the workspace's `workspace.yml`
+  (`my_own_accounts`, `monitored_hashtags`, the age thresholds and
+  `max_filename_chars`), with buttons to open it in a text editor and reload
+  it. These settings belong to the workspace so that the CLI and the app
+  agree; see [WORKSPACE_CONFIG_REQUEST.md](WORKSPACE_CONFIG_REQUEST.md).
 
 Appearance (light/dark) follows the system, as native apps do; the web UI's
 Warm/Neutral tone and font-stack overrides have no Mac equivalent and are
 dropped.
 
-## 5. Modules (planned)
+## 5. Modules
 
-`GTDCore` (Foundation only, unit-tested, builds on Linux):
-
-| File | Responsibility | Origin in the Python edition |
-| --- | --- | --- |
-| `TextSupport.swift` | Python-compatible string helpers, atomic file IO | — |
-| `CSV.swift` | reader and writer matching Python's `csv` (excel dialect) | Python's `csv` |
-| `Config.swift` | folders, aliases, stamp fields, account and hashtag normalisation | `config.py` |
-| `MIME.swift` | RFC 5322 headers, RFC 2047 words, multipart walking, base64 / QP, charsets | Python's `email` package |
-| `EmailUtil.swift` | body text, HTML to text, correspondents, message refs, own-account matching | `emailutil.py` |
-| `Naming.swift` | slugs, filenames, uniqueness with a protected ref suffix | `naming.py` |
-| `Metadata.swift` | load, sync, get/set, flags, stamps | `metadata.py` |
-| `Workspace.swift` | folders, listing, find, move, ingest, alloc, close, pin | `fs.py`, `ingest.py`, `commands/*.py` |
-| `Metrics.swift` | autofix plan, status, `ttS` / `Td` / `Wd` / `tttR`, stages | `metrics.py` |
-| `Thread.swift` | split a body into its quoted history | `thread.py` |
-| `Overview.swift` | Dashboard figures and the lists behind them | `site.py` |
-| `Performance.swift` | backlog, flow series, percentiles, hit rates, Sankey data | `dashboard.py` (the numbers, not the HTML) |
-
-`QDVCGTDEML` (the app): `GTDApp`, `Commands`, `ContentView`,
-`SidebarView`, `MessageListView`, `ReadingPane`, `ThreadView`,
-`DashboardView`, `PerformanceView` (Swift Charts), `Sheets`, `AppModel`,
-`Prefs`, `SettingsView`, `Platform`.
+See [MAINTENANCE.md §2](MAINTENANCE.md#2-modules) for the module list as
+built.
 
 ## 6. Parity testing
 
@@ -184,11 +173,13 @@ real-world headers (encoded words, folded lines, odd charsets, missing dates).
 
 ## 7. Performance view
 
-Swift Charts covers the box plots (drawn with `RuleMark` and `RectangleMark`),
-the stacked composition bars, the throughput lines and the backlog histogram.
-It has no Sankey, so the flow diagram would be a hand-drawn `Canvas` using the
-same stage-collapsing rules as `dashboard.build_sankey`. This is the largest
-single piece of UI work and is a candidate for a later phase (see §9).
+The first version has the **open backlog** (headline figures and the current
+pile by age) and **throughput** (arrivals, resolutions and the open backlog,
+weekly or monthly), drawn with Swift Charts, with an account filter. Like
+`generate_dashboard`, it shows figures only when 01-input is empty and the
+date stamps are consistent; otherwise it explains what to do first. The KPI
+table, box plots, percentiles, hit rates and the Sankey diagram are not
+planned for now.
 
 ## 8. Not planned
 
@@ -197,21 +188,19 @@ single piece of UI work and is a candidate for a later phase (see §9).
 - The mobile build.
 - Any network access.
 
-## 9. Open questions
+## 9. Decisions
 
-1. **Where do settings come from?** The CLI reads `config.yml` next to its
-   own code, not from the workspace, so pointing the app at a workspace does
-   not reveal `my_own_accounts`, `monitored_hashtags`, the age thresholds or
-   `max_filename_chars` (which changes the filenames `ingest` produces).
-   Options: (a) the app's own Settings, per workspace, in `UserDefaults`;
-   (b) the user points the app at a `config.yml` once and it reads it,
-   read-only; (c) both, with `config.yml` taking precedence when chosen.
-2. **Which actions?** Proposed: ingest, alloc, close, pin/unpin, metadata
-   edit, workflow autofix, metadata check. `generate_dashboard` and `export`
-   are left out.
-3. **Performance view in the first version, or a later phase?**
-4. **Automatic ingest?** `gtd list` ingests on every run. Should the app
-   ingest when it opens a workspace and on Refresh, or only on the explicit
-   Ingest command (with an opt-in setting for the automatic behaviour)?
-5. **Names:** repository `qdvc-gtd-eml-mac`, app "QDVC GTD EML", bundle id
-   `org.qdvc.GTDEML`, executable `QDVCGTDEML`.
+1. **Settings** belong to the workspace, in `<working_directory>/workspace.yml`
+   (read-only to the app). The gtd-eml team has been asked to read it too; see
+   [WORKSPACE_CONFIG_REQUEST.md](WORKSPACE_CONFIG_REQUEST.md).
+2. **Actions:** ingest, alloc, close, pin/unpin, metadata edit, workflow
+   autofix and metadata check, as proposed.
+3. **Performance:** open backlog and throughput only (§7).
+4. **Ingest** runs only on the explicit command (⇧⌘N, toolbar, banner).
+5. **Identity:** repository `qdvc-gtd-eml-mac`, bundle identifier
+   `org.qdvc.gtdeml.mac`, app name "QDVC GTD EML".
+
+One layout change was made while building: the window is a two-column split
+(sidebar | content) whose content is either the message list and reading pane
+side by side, or the Dashboard or Performance page. This keeps the sidebar
+stable while letting the overview pages use the full width.
