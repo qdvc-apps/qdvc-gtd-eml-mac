@@ -5,7 +5,7 @@ import GTDCore
 
 /// A sidebar entry.
 enum SidebarItem: Hashable {
-    case dashboard, performance
+    case dashboard, performance, calendar
     case folder(Folder)
     case dueSet, noDue, pinned
     case hashtag(String)
@@ -16,8 +16,10 @@ enum SidebarItem: Hashable {
     /// The emails behind a Dashboard figure or project.
     case attention(String)
     case project(String)
+    /// The emails with events on one Calendar day.
+    case calendarDay(Day)
 
-    var isMailbox: Bool { self != .dashboard && self != .performance }
+    var isMailbox: Bool { self != .dashboard && self != .performance && self != .calendar }
 }
 
 enum SortKey: String, CaseIterable, Identifiable {
@@ -75,6 +77,14 @@ final class AppModel {
     private(set) var autofix = AutofixPlan(pendingInput: 0, fixes: [], blockers: [])
     private(set) var overview = Overview([])
     private(set) var metadataRows: [String: Metadata.Row] = [:]
+    /// Events per day for the Calendar (rebuilt on load and when the date
+    /// settings change).
+    private(set) var calendarIndex = CalendarIndex(days: [:])
+    /// The first day of the month the Calendar shows.
+    var calendarMonth: Day = {
+        let t = Day.today()
+        return Day(year: t.year, month: t.month, day: 1)
+    }()
     private(set) var isLoading = false
     private(set) var statusMessage: String?
 
@@ -104,8 +114,18 @@ final class AppModel {
     var sortAscending: Bool = Prefs.sortAscending { didSet { Prefs.sortAscending = sortAscending } }
     var showDateHeadings: Bool = Prefs.dateHeadings { didSet { Prefs.dateHeadings = showDateHeadings } }
     var dateStyle: DateStyle = Prefs.dateStyle { didSet { Prefs.dateStyle = dateStyle } }
-    var timeZoneID: String = Prefs.timeZone { didSet { Prefs.timeZone = timeZoneID } }
-    var naiveDates: NaiveDates = Prefs.naiveDates { didSet { Prefs.naiveDates = naiveDates } }
+    var timeZoneID: String = Prefs.timeZone {
+        didSet {
+            Prefs.timeZone = timeZoneID
+            rebuildCalendar()
+        }
+    }
+    var naiveDates: NaiveDates = Prefs.naiveDates {
+        didSet {
+            Prefs.naiveDates = naiveDates
+            rebuildCalendar()
+        }
+    }
     var radarFolders: Set<Folder> = Prefs.radarFolders { didSet { Prefs.radarFolders = radarFolders } }
     var dimOffRadar: Bool = Prefs.dimOffRadar { didSet { Prefs.dimOffRadar = dimOffRadar } }
     var reopenLast: Bool = Prefs.reopenLast { didSet { Prefs.reopenLast = reopenLast } }
@@ -165,7 +185,7 @@ final class AppModel {
     /// The emails a sidebar entry lists (before search and sorting).
     func members(of item: SidebarItem) -> [EmailRecord] {
         switch item {
-        case .dashboard, .performance:
+        case .dashboard, .performance, .calendar:
             return []
         case .folder(let f):
             return records.filter { $0.folder == f }
@@ -191,6 +211,9 @@ final class AppModel {
             return records.filter { ids.contains($0.id) }
         case .project(let name):
             return records.filter { $0.project == name }
+        case .calendarDay(let day):
+            let ids = calendarIndex.days[day] ?? [:]
+            return records.filter { ids[$0.id] != nil }
         }
     }
 
@@ -275,6 +298,7 @@ final class AppModel {
         switch item {
         case .dashboard: return "Dashboard"
         case .performance: return "Performance"
+        case .calendar: return "Calendar"
         case .folder(let f): return f.title
         case .dueSet: return "Due Date Set"
         case .noDue: return "No Due Date"
@@ -284,6 +308,8 @@ final class AppModel {
         case .sent(let a): return a.flatMap { accountName($0) }.map { "Sent \u{2014} \($0)" } ?? "Sent"
         case .attention(let key): return overview.attention.first { $0.key == key }.map { $0.label.capitalizedFirst } ?? key
         case .project(let name): return "Project: \(name)"
+        case .calendarDay(let day):
+            return dates.render(.init(y: day.year, mo: day.month, d: day.day), withTime: false, style: .long)
         }
     }
 
@@ -433,6 +459,7 @@ final class AppModel {
         autofix = snapshot.autofix
         metadataRows = snapshot.metadataRows
         overview = Overview(snapshot.records)
+        rebuildCalendar()
         isLoading = false
         hasLoaded = true
         let visible = Set(visibleRecords.map(\.id))
@@ -440,6 +467,17 @@ final class AppModel {
         if wanted.isEmpty, let fallback = fallbackSelection, visible.contains(fallback) { wanted = [fallback] }
         fallbackSelection = nil
         if wanted != selection { selection = wanted }
+    }
+
+    private func rebuildCalendar() {
+        let fmt = dates
+        calendarIndex = CalendarIndex.build(records, instantDay: { fmt.day($0) }, quotedDay: { fmt.quotedDay($0) })
+    }
+
+    /// Show the emails with events on `day` (if there are any).
+    func openCalendarDay(_ day: Day) {
+        guard calendarIndex.count(on: day) > 0 else { return }
+        sidebarSelection = .calendarDay(day)
     }
 
     private func keepSelectionVisible() {

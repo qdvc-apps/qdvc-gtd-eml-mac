@@ -9,7 +9,7 @@ directly on the workspace, producing exactly the same files and
 
 - **Mail-style window:** Workflow folders (Input … Archive), Smart Mailboxes
   (due date set, no due date, pinned, one per monitored hashtag), Inbox and
-  Sent per own account, a Dashboard and a Performance view.
+  Sent per own account, a Dashboard, a Performance view and a Calendar.
 - **Message list** with the next action as the preview line, age dots, account
   labels, due-date capsules and collapsible date headings.
 - **Reading pane** with editable annotations (next action, project, due
@@ -20,6 +20,8 @@ directly on the workspace, producing exactly the same files and
   Date Stamps… (`workflow_autofix`), Check Metadata… (`metadata_check`).
   The CLI's refusals apply, with its wording.
 - **Performance:** the open backlog and weekly/monthly throughput, per account.
+- **Calendar:** a month heatmap of how many emails had something happen each
+  day (received, quoted, or a workflow stamp); click a day to list them.
 - Drop `.eml` files on the window to add them to Input.
 
 ## Build and run

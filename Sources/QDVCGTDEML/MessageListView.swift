@@ -147,6 +147,16 @@ struct MessageRow: View {
                             .foregroundStyle(overdue ? Color.red : Color.secondary)
                             .lineLimit(1)
                     }
+                    if case .calendarDay(let day) = model.sidebarSelection, !model.isSearching {
+                        ForEach(model.calendarIndex.kinds(on: day, for: r.id), id: \.self) { kind in
+                            Text(kind.label)
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                .lineLimit(1)
+                        }
+                    }
                     if r.status == "weird" {
                         Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).imageScale(.small)
                             .help("Inconsistent date progression")

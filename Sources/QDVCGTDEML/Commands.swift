@@ -52,6 +52,9 @@ struct GTDCommands: Commands {
             Button("Performance") { go(.performance) }
                 .keyboardShortcut("7")
                 .disabled(model.workspace == nil)
+            Button("Calendar") { go(.calendar) }
+                .keyboardShortcut("8")
+                .disabled(model.workspace == nil)
             Divider()
             Toggle("Show Date Headings", isOn: $model.showDateHeadings)
             Menu("Sort By") {

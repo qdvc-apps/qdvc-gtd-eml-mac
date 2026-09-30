@@ -56,12 +56,14 @@ frosted-glass envelope, sealed with a green check mark, in a sage palette.
 | `Workspace.swift` | folders, find, ingest, alloc, close, pin/unpin, set, metadata check, autofix apply, adding files | `fs.py`, `ingest.py`, `commands/*.py` |
 | `Metrics.swift` | autofix planning, status and `ttS`/`Td`/`Wd`/`tttR`, backlog, histogram, flow series | `metrics.py`, `dashboard.py` |
 | `Records.swift` | `EmailRecord`, Dashboard `Overview`, list date buckets, the cached loader | `site.py` |
+| `Calendar.swift` | events per day (Date headers, quoted dates, ds_* stamps) for the Calendar | — (Mac only) |
 
 The app (`QDVCGTDEML`): `GTDApp` (scenes), `AppModel` (all state and actions,
 `@Observable`), `Commands` (menus and shortcuts), `ContentView` (window,
 toolbar, banners, sheets, alerts, welcome screen), `SidebarView`,
 `MessageListView`, `ReadingPane` (pills, annotations card, workflow trail,
-thread), `DashboardView`, `PerformanceView` (Swift Charts), `Sheets` (Close
+thread), `DashboardView`, `PerformanceView` (Swift Charts), `CalendarView`
+(month heatmap), `Sheets` (Close
 With, Review Date Stamps, Check Metadata), `SettingsView`, `Prefs`,
 `DateFormatting`, `Platform`.
 
@@ -122,6 +124,7 @@ the cases.
   text, uuencoded parts are left encoded, and a BOM before the CSV header is
   ignored (Python would fail to find the first column).
 - **Performance** shows only the open backlog and throughput sections.
+- **Calendar** is new in the Mac app (no CLI equivalent); it only reads.
 - **Dates in the list** are Mail-style (time today, Yesterday, weekday,
   then a compact date); the headings follow the design's buckets.
 

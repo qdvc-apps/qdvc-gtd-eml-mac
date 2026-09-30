@@ -71,6 +71,8 @@ struct MainSplitView: View {
                         MailboxView()
                     } else if model.sidebarSelection == .performance {
                         PerformanceView()
+                    } else if model.sidebarSelection == .calendar {
+                        CalendarView()
                     } else {
                         DashboardView()
                     }

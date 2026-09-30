@@ -155,4 +155,42 @@ final class CoreTests: XCTestCase {
         let warnings = try ws.setFields("2026-09-30-dropped.eml", ["due_date": "soon"])
         XCTAssertEqual(warnings.count, 1)
     }
+
+    func testCalendarIndex() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("gtd-cal-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = Workspace(root: root)
+        ws.today = { Day(iso: "2026-09-30")! }
+        try ws.ensureFolders()
+        let raw = """
+        From: jane@example.com
+        Subject: Re: Lunch
+        Date: Mon, 28 Sep 2026 23:30:00 -0700
+
+        Fine.
+
+        On Fri, 25 Sep 2026 at 10:00, Me <me@example.com> wrote:
+        > Lunch?
+        """
+        try Data(raw.utf8).write(to: ws.url(.input, "a.eml"))
+        try ws.ingest(maxFilenameChars: 60)
+        let name = try XCTUnwrap(ws.listEML(.triage).first)
+        try ws.alloc(name, to: .archive)
+        let snapshot = RecordLoader().load(ws, config: WorkspaceConfig())
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let index = CalendarIndex.build(snapshot.records, instantDay: { date in
+            let c = utc.dateComponents([.year, .month, .day], from: date)
+            return Day(year: c.year!, month: c.month!, day: c.day!)
+        }, quotedDay: { Day(validYear: $0.y, month: $0.mo, day: $0.d) })
+        let id = Folder.archive.rawValue + "/" + name
+        // The Date header is 29 Sep in UTC; the quoted reply was on the 25th.
+        XCTAssertEqual(index.kinds(on: Day(iso: "2026-09-29")!, for: id), [.received])
+        XCTAssertEqual(index.kinds(on: Day(iso: "2026-09-25")!, for: id), [.quoted])
+        XCTAssertEqual(index.kinds(on: Day(iso: "2026-09-30")!, for: id), [.triaged, .archived])
+        XCTAssertEqual(index.count(on: Day(iso: "2026-09-30")!), 1)
+        XCTAssertEqual(index.count(on: Day(iso: "2026-09-28")!), 0)
+        XCTAssertEqual(CalendarIndex.shift(Day(iso: "2026-01-01")!, by: -1).iso, "2025-12-01")
+        XCTAssertEqual(CalendarIndex.monthDays(Day(iso: "2028-02-01")!).count, 29)
+    }
 }

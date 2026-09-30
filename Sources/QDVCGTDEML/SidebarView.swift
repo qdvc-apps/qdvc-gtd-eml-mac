@@ -12,6 +12,7 @@ struct SidebarView: View {
             Section("Overview") {
                 row(.dashboard, "Dashboard", "square.grid.2x2", badge: false)
                 row(.performance, "Performance", "chart.xyaxis.line", badge: false)
+                row(.calendar, "Calendar", "calendar", badge: false)
             }
             Section("Workflow") {
                 ForEach(Folder.allCases) { folder in
@@ -22,7 +23,7 @@ struct SidebarView: View {
                 }
             }
             Section("Smart Mailboxes") {
-                row(.dueSet, "Due Date Set", "calendar")
+                row(.dueSet, "Due Date Set", "calendar.badge.clock")
                 row(.noDue, "No Due Date", "calendar.badge.minus")
                 row(.pinned, "Pinned", "pin")
                 ForEach(model.config.monitoredHashtags, id: \.self) { tag in
@@ -46,7 +47,7 @@ struct SidebarView: View {
 
     private func isResult(_ item: SidebarItem) -> Bool {
         switch item {
-        case .attention, .project: return true
+        case .attention, .project, .calendarDay: return true
         default: return false
         }
     }

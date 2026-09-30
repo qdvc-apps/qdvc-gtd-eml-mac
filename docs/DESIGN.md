@@ -47,7 +47,7 @@ vocabulary:
 
 | Section | Entries | SF Symbol ideas |
 | --- | --- | --- |
-| Overview | Dashboard, Performance | `rectangle.3.group`, `chart.bar.xaxis` |
+| Overview | Dashboard, Performance, Calendar | `square.grid.2x2`, `chart.xyaxis.line`, `calendar` |
 | Workflow | Input, Triage, Actionable, Delegated, Reference, Archive (with counts) | `tray.and.arrow.down`, `tray`, `bolt`, `person.2`, `books.vertical`, `archivebox` |
 | Smart Mailboxes | Due Date Set, No Due Date, Pinned, one per monitored hashtag | `calendar.badge.clock`, `calendar`, `pin`, `number` |
 | Accounts | per own account: Inbox and Sent (only when accounts are configured) | `envelope`, `paperplane` |
@@ -121,7 +121,8 @@ Also:
   is `alloc`, as dragging to a mailbox is in Mail. Dropping `.eml` files from
   Finder or Mail onto the window copies them into `01-input`.
 - **Go to folder:** ⌘1 – ⌘6 select the six Workflow folders, as ⌘1… select
-  favourite mailboxes in Mail. ⌘0 is the Dashboard and ⌘7 Performance.
+  favourite mailboxes in Mail. ⌘0 is the Dashboard, ⌘7 Performance and ⌘8
+  the Calendar.
 - **Context menus** on rows repeat the Message menu.
 - **No undo for moves.** Undoing an `alloc` would mean clearing a `ds_*`
   stamp, which nothing in the CLI ever does. Instead, moving is disabled
@@ -180,6 +181,23 @@ weekly or monthly), drawn with Swift Charts, with an account filter. Like
 date stamps are consistent; otherwise it explains what to do first. The KPI
 table, box plots, percentiles, hit rates and the Sankey diagram are not
 planned for now.
+
+## 7a. Calendar view
+
+A month grid (weeks start on Monday; ‹ › move between months, Today returns
+to the current one, which is the default). Each day is shaded by the number
+of distinct emails with at least one event that day, relative to the busiest
+day of the month shown; days with no events are blank. Events are:
+
+- each email's own `Date:` header, placed on a day in the Settings time zone;
+- the dates of the messages quoted in its body, by the same rules as the
+  reading pane (skipped when they name no real day);
+- the five ds_* stamps in metadata.csv, as written.
+
+`due_date` is a deadline, not an event, and is left out. Clicking a day lists
+its emails (a Results entry in the sidebar), each labelled with what happened
+to it that day. Below the grid, a small table counts the emails per kind of
+event for the month.
 
 ## 8. Not planned
 

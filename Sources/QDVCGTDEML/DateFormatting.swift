@@ -102,6 +102,25 @@ struct DateFormatting {
         return render(f, withTime: true)
     }
 
+    /// The day a quoted header's date falls on, by the same rules as
+    /// `quoted(_:raw:)`: converted into the zone when it has a time and an
+    /// offset (or is read as UTC), otherwise the day as written.
+    func quotedDay(_ p: DateParts) -> Day? {
+        guard let written = Day(validYear: p.y, month: p.mo, day: p.d) else { return nil }
+        guard let h = p.h else { return written }
+        let offsetMinutes: Int
+        if let o = p.offset {
+            offsetMinutes = o
+        } else if naive == .utc {
+            offsetMinutes = 0
+        } else {
+            return written
+        }
+        let dayNumber = written.days(since: Day(year: 1970, month: 1, day: 1))
+        let epoch = dayNumber * 86400 + h * 3600 + (p.mi ?? 0) * 60 - offsetMinutes * 60
+        return day(Date(timeIntervalSince1970: TimeInterval(epoch)))
+    }
+
     /// Month names for the list's date headings.
     static func monthName(_ month: Int) -> String { englishMonths[max(1, min(12, month)) - 1] }
 }
