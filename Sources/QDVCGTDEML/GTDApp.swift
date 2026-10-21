@@ -19,16 +19,6 @@ struct GTDApp: App {
             GTDCommands(model: model)
         }
 
-        // Message windows, opened as tabs of the window they were asked from
-        // (Open in New Tab); one dragged out of the tab bar is a standalone
-        // message window.
-        WindowGroup("Message", id: AppModel.messageWindowID, for: MessageRef.self) { $ref in
-            MessageWindow(ref: $ref)
-                .environment(model)
-        }
-        .defaultSize(width: 900, height: 760)
-        .commandsRemoved()
-
         Settings {
             SettingsView()
                 .environment(model)

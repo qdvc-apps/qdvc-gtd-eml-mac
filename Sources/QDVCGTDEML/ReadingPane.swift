@@ -311,7 +311,6 @@ struct AnnotationsCard: View {
 /// New Tab, opens it in a new tab, as a link does in Safari.
 struct HistoryCard: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
     let record: EmailRecord
     let chain: [CloseHistory.Entry]
     let context: String
@@ -335,7 +334,7 @@ struct HistoryCard: View {
     }
 
     private func openInNewTab(_ r: EmailRecord) {
-        model.openInNewTab([r.id]) { openWindow(id: AppModel.messageWindowID, value: $0) }
+        model.openInNewTab([r.id])
     }
 
     private var position: String {
@@ -372,9 +371,10 @@ struct HistoryCard: View {
                     .contextMenu {
                         Button("Open in New Tab") { openInNewTab(other) }
                         if context != AppModel.viewerContext {
-                            Button("Show in Viewer") {
-                                model.showInViewer(other.id) { openWindow(id: AppModel.viewerWindowID) }
-                            }
+                            // Switches to the viewer's tab (or window); never
+                            // opens a new one.
+                            Button("Show in Viewer") { model.showInViewer(other.id) }
+                                .disabled(!model.canShowViewer)
                         }
                         Divider()
                         Button("Open in Mail") { model.openInMail([other.id]) }

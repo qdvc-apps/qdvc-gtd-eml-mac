@@ -8,10 +8,6 @@ import GTDCore
 @MainActor
 struct GTDCommands: Commands {
     @Bindable var model: AppModel
-    /// Set while a message window (tab) is key: the Message menu then acts
-    /// on its email rather than the viewer's selection.
-    @FocusedValue(\.messageWindow) var focusedMessage: MessageWindowFocus?
-    @Environment(\.openWindow) var openWindow
 
     var body: some Commands {
         SidebarCommands()
@@ -75,15 +71,16 @@ struct GTDCommands: Commands {
         }
 
         CommandMenu("Message") {
-            let focus = focusedMessage
-            let ids: [String] = focus.map { [$0.recordID] } ?? model.selectedRecords.map(\.id)
-            let single: EmailRecord? = focus != nil ? model.record(focus?.recordID) : model.selectedRecord
+            // While a message window (tab) is key, the menu acts on its
+            // email rather than the viewer's selection.
+            let inTab = model.isMessageWindowActive
+            let tabRecord = model.activeMessageRecord
+            let ids: [String] = inTab ? (tabRecord.map { [$0.id] } ?? []) : model.selectedRecords.map(\.id)
+            let single: EmailRecord? = inTab ? tabRecord : model.selectedRecord
             let records = ids.compactMap { model.record($0) }
-            Button(ids.count > 1 ? "Open in New Tabs" : "Open in New Tab") {
-                model.openInNewTab(ids) { openWindow(id: AppModel.messageWindowID, value: $0) }
-            }
-            // A message window already shows its email.
-            .disabled(ids.isEmpty || focus != nil)
+            Button(ids.count > 1 ? "Open in New Tabs" : "Open in New Tab") { model.openInNewTab(ids) }
+                // A message window already shows its email.
+                .disabled(ids.isEmpty || inTab)
             Button("Open in Mail") { model.openInMail(ids) }
                 .keyboardShortcut(.downArrow, modifiers: [.command])
                 .disabled(ids.isEmpty)
@@ -127,7 +124,7 @@ struct GTDCommands: Commands {
                 .disabled(!model.canTag(ids))
             }
             Button("Edit Annotations") {
-                model.beginEdit(single?.id, context: focus?.context ?? AppModel.viewerContext)
+                model.beginEdit(single?.id, context: model.activeContext)
             }
             .keyboardShortcut("e")
             .disabled(single.map { model.annotationsRefusal($0) != nil } ?? true)
@@ -135,9 +132,7 @@ struct GTDCommands: Commands {
 
         CommandGroup(after: .windowArrangement) {
             Divider()
-            Button("Reopen Closed Tab") {
-                model.reopenClosedTab { openWindow(id: AppModel.messageWindowID, value: $0) }
-            }
+            Button("Reopen Closed Tab") { model.reopenClosedTab() }
             .keyboardShortcut("t", modifiers: [.command, .shift])
             .disabled(!model.canReopenTab)
             Menu("Select Tab") {

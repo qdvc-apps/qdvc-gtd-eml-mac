@@ -44,6 +44,7 @@ enum Prefs {
         static let dateHeadings = "showDateHeadings"
         static let sortKey = "sortKey"
         static let sortAscending = "sortAscending"
+        static let listWidth = "messageListWidth"
     }
 
     private static var defaults: UserDefaults { .standard }
@@ -103,6 +104,12 @@ enum Prefs {
     static var sortKey: SortKey {
         get { SortKey(rawValue: defaults.string(forKey: Key.sortKey) ?? "") ?? .date }
         set { defaults.set(newValue.rawValue, forKey: Key.sortKey) }
+    }
+
+    /// The message list's width beside the reading pane.
+    static var listWidth: CGFloat {
+        get { (defaults.object(forKey: Key.listWidth) as? Double).map { CGFloat($0) } ?? 440 }
+        set { defaults.set(Double(newValue), forKey: Key.listWidth) }
     }
 
     static var sortAscending: Bool {

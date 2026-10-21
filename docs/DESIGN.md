@@ -127,7 +127,9 @@ As in Mail with "Prefer tabs", an email can be opened in a **message
 window**, which joins the tab group of the window it was opened from as a
 native macOS tab. The viewer window (sidebar, list, reading pane) is the
 first tab; a message tab shows just the email, with the same reading-pane
-content and a small toolbar (Show in Viewer, Archive). Dragging a message
+content and no toolbar items (the Message menu and context menus have the
+actions). The tab bar has no "+" button, since there is no empty tab to
+open. Dragging a message
 tab out of the tab bar leaves it a standalone message window, since that is
 what it is; Window → Merge All Windows puts it back. Only the viewer has a
 sidebar, a list and a selection.
@@ -137,16 +139,20 @@ sidebar, a list and a selection.
   link in Safari). An email already open in a window is brought forward
   instead of being opened twice.
 - **In a message tab,** clicking an email in the History card shows it in
-  that tab; its context menu adds Show in Viewer, which selects it in the
-  viewer's list. The Message menu acts on the tab's email, and sheets,
+  that tab; its context menu adds Show in Viewer, which switches to the
+  viewer's tab and selects it in the list (it never opens a window). The Message menu acts on the tab's email, and sheets,
   alerts and in-place editing appear in the tab where they were asked for.
   A tab follows its email by file name, so it keeps showing it after a move.
 - **Shortcuts:** ⌘W closes a tab (the system's Close), ⌘⇧T reopens the last
   closed message tab (Window → Reopen Closed Tab, as in Safari; ⌘⇧W stays
   Close Workspace), ⌘1 – ⌘9 select the first to ninth tab (Window → Select
   Tab), and ⌃⇥ / ⌃⇧⇥ move between tabs (system).
-- Closing the workspace closes its message windows; one restored from an
-  earlier session closes itself unless its workspace is the one open.
+- Closing or changing the workspace closes its message windows. Message
+  windows are not restored at the next launch.
+- The list and reading pane are split by SwiftUI, not AppKit's split view
+  (`HSplitView`), which ignores SwiftUI's safe area: with it, the tab bar
+  cut across the tops of both when it appeared. The list's width is kept
+  between launches.
 
 ## 3. Actions (the CLI, as Mail-style commands)
 

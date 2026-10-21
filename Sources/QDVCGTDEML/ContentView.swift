@@ -66,9 +66,7 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 340)
         } detail: {
             // The banners sit in the layout above the content, not in a
-            // safe-area inset: HSplitView (AppKit's NSSplitView) ignores
-            // SwiftUI's insets, so an inset banner would overlap the list's
-            // title and slide up under the toolbar.
+            // safe-area inset, so they push the content down.
             VStack(spacing: 0) {
                 BannerStack()
                 Group {
@@ -95,15 +93,75 @@ struct MainSplitView: View {
     }
 }
 
-/// The list and reading pane, side by side.
+/// The list and reading pane, side by side, with a divider to drag.
+///
+/// Laid out by SwiftUI rather than with HSplitView: AppKit's split view
+/// ignores SwiftUI's safe area, so when the window's tab bar appeared and
+/// the title bar grew, the list and reading pane stayed where they were and
+/// the tab bar cut across their tops.
 struct MailboxView: View {
+    @State private var listWidth: CGFloat = Prefs.listWidth
+    @State private var dragStartWidth: CGFloat?
+
+    static let minList: CGFloat = 320
+    static let maxList: CGFloat = 760
+    static let minReading: CGFloat = 380
+
     var body: some View {
-        HSplitView {
-            MessageListView()
-                .frame(minWidth: 320, idealWidth: 440, maxWidth: 760)
-            ReadingPane()
-                .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
+        GeometryReader { geo in
+            let width = clamp(listWidth, total: geo.size.width)
+            HStack(spacing: 0) {
+                MessageListView()
+                    .frame(width: width)
+                SplitDivider { translation in
+                    let start = dragStartWidth ?? width
+                    if dragStartWidth == nil { dragStartWidth = width }
+                    listWidth = clamp(start + translation, total: geo.size.width)
+                } onEnd: {
+                    dragStartWidth = nil
+                    Prefs.listWidth = listWidth
+                }
+                .zIndex(1)
+                ReadingPane()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+    }
+
+    private func clamp(_ width: CGFloat, total: CGFloat) -> CGFloat {
+        let upper = max(MailboxView.minList, min(MailboxView.maxList, total - MailboxView.minReading - 1))
+        return min(max(width, MailboxView.minList), upper)
+    }
+}
+
+/// A 1 pt separator with a wider invisible handle that shows the
+/// column-resize pointer and reports how far it has been dragged.
+private struct SplitDivider: View {
+    let onDrag: (CGFloat) -> Void
+    let onEnd: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1)
+            .frame(maxHeight: .infinity)
+            .overlay {
+                Color.clear
+                    .frame(width: 9)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        guard inside != hovering else { return }
+                        hovering = inside
+                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { onDrag($0.translation.width) }
+                        .onEnded { _ in onEnd() })
+            }
+            .onDisappear {
+                if hovering { NSCursor.pop() }
+            }
     }
 }
 

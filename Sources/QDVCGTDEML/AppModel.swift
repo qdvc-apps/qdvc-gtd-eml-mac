@@ -420,6 +420,7 @@ final class AppModel {
             alert = AlertInfo(title: "Could Not Create Folders", message: error.localizedDescription)
             return
         }
+        closeMessageWindows()
         activeSheet = nil
         editingAnnotationsID = nil
         selection = []
@@ -441,6 +442,7 @@ final class AppModel {
     }
 
     func closeWorkspace() {
+        closeMessageWindows()
         activeSheet = nil
         workspace = nil
         records = []
@@ -942,14 +944,16 @@ final class AppModel {
 
     // MARK: Windows and tabs
     //
-    // The viewer (sidebar, list, reading pane) is one window; "Open in New
-    // Tab" opens an email in a message window, added as a native tab to the
+    // The viewer (sidebar, list, reading pane) is SwiftUI's main window;
+    // "Open in New Tab" opens an email in a message window, which the app
+    // creates itself (see MessageWindows) and adds as a native tab to the
     // window it was asked from. A message tab dragged out of the tab bar is
     // simply a standalone message window. Only the viewer has a sidebar, a
     // list and a selection; a message window shows one email, by file name.
+    // (Message windows are not a SwiftUI WindowGroup: that gave the tab bar
+    // a "+" button for a new, empty window.)
 
     static let viewerContext = "viewer"
-    static let messageWindowID = "message"
     static let viewerWindowID = "main"
     /// Shared by the viewer and message windows, so they tab together
     /// (also with Window \u{203A} Merge All Windows).
@@ -957,18 +961,25 @@ final class AppModel {
 
     /// The window that is key: the viewer, or a message window's context.
     private(set) var activeContext = AppModel.viewerContext
+    /// What each open message window shows, by context.
+    private(set) var openTabs: [String: MessageRef] = [:]
     /// Message tabs closed this session, most recent last (Reopen Closed Tab).
     private(set) var closedTabs: [MessageRef] = []
-    @ObservationIgnored private var openTabs: [String: MessageRef] = [:]
+    @ObservationIgnored private var messageWindows: [String: NSWindow] = [:]
     @ObservationIgnored private weak var viewerWindow: NSWindow?
-    /// The window the next message window joins as a tab.
-    @ObservationIgnored private weak var tabHost: NSWindow?
-    @ObservationIgnored private var attachedWindows = Set<ObjectIdentifier>()
     @ObservationIgnored private var windowObservers: [ObjectIdentifier: [NSObjectProtocol]] = [:]
 
     /// True when an action comes from the viewer, so it may move the
     /// viewer's selection; from a message tab it leaves it alone.
     private var actingInViewer: Bool { activeContext == AppModel.viewerContext }
+
+    /// True while a message window is key: the menus then act on its email.
+    var isMessageWindowActive: Bool { !actingInViewer }
+
+    /// The email shown by the key message window, if one is key.
+    var activeMessageRecord: EmailRecord? {
+        openTabs[activeContext].flatMap { recordsByFilename[$0.filename] }
+    }
 
     func record(filename: String) -> EmailRecord? { recordsByFilename[filename] }
 
@@ -976,14 +987,12 @@ final class AppModel {
         workspace.map { MessageRef(workspace: $0.root.path, filename: r.filename) }
     }
 
-    /// Open emails in new tabs of the key viewer or message window. `open`
-    /// is SwiftUI's openWindow for the message scene. An email already open
-    /// in a window is brought to the front instead.
-    func openInNewTab(_ ids: [String], open: (MessageRef) -> Void) {
+    /// Open emails in new tabs of the key viewer or message window. An email
+    /// already open in a message window brings that window forward instead.
+    func openInNewTab(_ ids: [String]) {
         let refs = ids.prefix(10).compactMap { id in record(id).flatMap { messageRef($0) } }
-        guard !refs.isEmpty else { return }
-        tabHost = currentTabHost()
-        refs.forEach(open)
+        let host = currentTabHost()
+        for ref in refs { openMessageWindow(ref, host: host) }
     }
 
     var canReopenTab: Bool {
@@ -991,24 +1000,24 @@ final class AppModel {
         return closedTabs.contains { $0.workspace == path }
     }
 
-    func reopenClosedTab(open: (MessageRef) -> Void) {
+    func reopenClosedTab() {
         guard let path = workspace?.root.path else { return }
         while let ref = closedTabs.popLast() {
             guard ref.workspace == path, recordsByFilename[ref.filename] != nil else { continue }
-            tabHost = currentTabHost()
-            open(ref)
+            openMessageWindow(ref, host: currentTabHost())
             return
         }
     }
 
-    /// Bring the viewer forward (reopening it with `openViewer` if it was
-    /// closed) and select the email in its list.
-    func showInViewer(_ id: String, openViewer: () -> Void) {
-        if let window = viewerWindow {
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            openViewer()
-        }
+    /// The viewer is open (as a window or a tab), so Show in Viewer can
+    /// switch to it.
+    var canShowViewer: Bool { viewerWindow != nil }
+
+    /// Switch to the viewer (its tab, if it is one) and select the email in
+    /// its list. Does nothing when the viewer has been closed.
+    func showInViewer(_ id: String) {
+        guard let window = viewerWindow else { return }
+        window.makeKeyAndOrderFront(nil)
         activeContext = AppModel.viewerContext
         reveal(id)
     }
@@ -1018,34 +1027,53 @@ final class AppModel {
         return viewerWindow
     }
 
+    private func openMessageWindow(_ ref: MessageRef, host: NSWindow?) {
+        if let context = openTabs.first(where: { $0.value == ref })?.key, let window = messageWindows[context] {
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        let context = UUID().uuidString
+        let window = MessageWindows.make(ref, context: context, model: self)
+        prepareForTabbing(window)
+        openTabs[context] = ref
+        messageWindows[context] = window
+        observe(window, context: context)
+        // Added to the tab group before it is shown, so it never appears as
+        // a separate window first.
+        if let host, host !== window { host.addTabbedWindow(window, ordered: .above) }
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    /// A message window moved to another email (a history link).
+    func setTab(_ context: String, showing ref: MessageRef) {
+        if openTabs[context] != nil { openTabs[context] = ref }
+    }
+
+    func setTabTitle(_ context: String, _ title: String) {
+        messageWindows[context]?.title = title
+    }
+
+    /// Close every message window without remembering them (the workspace
+    /// is closing or changing).
+    private func closeMessageWindows() {
+        for (context, window) in messageWindows {
+            openTabs[context] = nil
+            window.close()
+        }
+        messageWindows = [:]
+        openTabs = [:]
+    }
+
     /// The viewer window has appeared (or its content was rebuilt).
     func attachViewerWindow(_ window: NSWindow) {
         viewerWindow = window
-        _ = prepareForTabbing(window)
+        prepareForTabbing(window)
         observe(window, context: AppModel.viewerContext)
     }
 
-    /// A message window has appeared: a new one joins the tab group of the
-    /// window it was opened from.
-    func attachMessageWindow(_ window: NSWindow, context: String) {
-        if prepareForTabbing(window), let host = tabHost, host !== window {
-            host.addTabbedWindow(window, ordered: .above)
-            window.makeKeyAndOrderFront(nil)
-        }
-        observe(window, context: context)
-    }
-
-    /// What a message window shows (nil: nothing, so closing it is not
-    /// remembered for Reopen Closed Tab).
-    func setTab(_ context: String, showing ref: MessageRef?) {
-        openTabs[context] = ref
-    }
-
-    /// True the first time a window is seen.
-    private func prepareForTabbing(_ window: NSWindow) -> Bool {
+    private func prepareForTabbing(_ window: NSWindow) {
         window.tabbingIdentifier = AppModel.tabbingIdentifier
         if window.tabbingMode == .disallowed { window.tabbingMode = .automatic }
-        return attachedWindows.insert(ObjectIdentifier(window)).inserted
     }
 
     private func observe(_ window: NSWindow, context: String) {
@@ -1065,12 +1093,14 @@ final class AppModel {
 
     private func windowWillClose(_ id: ObjectIdentifier, context: String) {
         windowObservers.removeValue(forKey: id)?.forEach { NotificationCenter.default.removeObserver($0) }
-        attachedWindows.remove(id)
         if context == AppModel.viewerContext {
             viewerWindow = nil
-        } else if let ref = openTabs.removeValue(forKey: context) {
-            closedTabs.append(ref)
-            if closedTabs.count > 20 { closedTabs.removeFirst(closedTabs.count - 20) }
+        } else {
+            messageWindows[context] = nil
+            if let ref = openTabs.removeValue(forKey: context) {
+                closedTabs.append(ref)
+                if closedTabs.count > 20 { closedTabs.removeFirst(closedTabs.count - 20) }
+            }
         }
         if editingContext == context { editingAnnotationsID = nil }
         if activeContext == context { activeContext = AppModel.viewerContext }

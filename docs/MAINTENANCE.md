@@ -58,9 +58,9 @@ since it does not import SwiftUI.
 
 `tools/make_icon.py` writes `Resources/AppIcon.svg` and `Resources/AppIcon.icns`
 (needs `rsvg-convert`; `brew install librsvg`). The design is the back of a
-white envelope filling the whole tile (Apple's template geometry), its flap
-folded down to the middle with a mint band along its edge and sealed there
-with a green check mark. As in QDVC Progress for macOS, the subject is the
+white envelope filling the whole tile (Apple's template geometry), with a
+mint band round its edge and along its flap, which is folded down to the
+middle and closed with a green wax seal pressed with a check mark. As in QDVC Progress for macOS, the subject is the
 tile itself rather than an emblem on a coloured background. `--preview`
 also writes `build/icon-preview.png`.
 
@@ -90,8 +90,9 @@ The app (`QDVCGTDEML`): `GTDApp` (scenes), `AppModel` (all state and actions,
 `@Observable`), `Commands` (menus and shortcuts), `ContentView` (window,
 toolbar, banners, sheets, alerts, welcome screen), `SidebarView`,
 `MessageListView`, `ReadingPane` (`MessageDetail`: pills, annotations card,
-history card, workflow trail, thread), `Tabs` (message windows, their
-native tabbing, the focused-window value the menus act on), `DashboardView`, `PerformanceView` (Swift Charts), `CalendarView`
+history card, workflow trail, thread), `Tabs` (message windows: created as
+AppKit windows hosting SwiftUI, and added to the viewer's native tab
+group by `AppModel`), `DashboardView`, `PerformanceView` (Swift Charts), `CalendarView`
 (month heatmap), `Sheets` (Close
 With, Review Date Stamps, Check Metadata), `SettingsView`, `Prefs`,
 `DateFormatting`, `Platform`.

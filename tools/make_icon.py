@@ -2,10 +2,10 @@
 """Generate the app icon: Resources/AppIcon.svg (vector master) and
 Resources/AppIcon.icns (every macOS size, rendered natively from the vector).
 
-The design is the back of a white envelope that fills the whole tile, its
-top flap folded down to the middle with a mint band along the flap's edge,
-and sealed there with a glossy green check mark (an email that has been
-dealt with). Like QDVC Progress for macOS, the subject is the tile itself
+The design is the back of a white envelope that fills the whole tile, with
+a mint band round its edge and along the edge of its top flap, which is
+folded down to the middle and closed there with a green wax seal pressed
+with a check mark (an email that has been dealt with). Like QDVC Progress for macOS, the subject is the tile itself
 rather than an emblem on a background; the mint keeps the family's earlier
 "Sage" palette. Soft folds, tinted shadows and a light top sheen give the
 depth of the macOS 26 icon style.
@@ -28,6 +28,7 @@ directly, so Apple's iconutil is not needed.
 """
 
 import argparse
+import math
 import struct
 import subprocess
 import sys
@@ -49,9 +50,11 @@ SHADOW_TINT = "#5E9C70"
 BAND_LIGHT, BAND_DEEP = "#86D7A2", "#43AE6C"
 EDGE = "#C6CFC8"
 
-# The seal: a green sphere with a white check mark.
-FACE_LIGHT, FACE_MID, FACE_DARK = "#B8F0C8", "#34C26A", "#1E8C4A"
-FEATURES = "#FFFFFF"
+# The seal: green sealing wax, with a check mark pressed into it.
+WAX_LIGHT, WAX_MID, WAX_DARK = "#6FD796", "#24A257", "#0F6331"
+WAX_PRESS_DARK, WAX_PRESS_LIGHT = "#13703A", "#3DBB6C"
+FEATURES = "#E4FAEC"
+FEATURE_SHADOW = "#0B4523"
 
 # ---------------------------------------------------------------------------
 # Apple's template geometry.
@@ -101,8 +104,8 @@ TILE = continuous_rounded_rect(TILE_ORIGIN, TILE_ORIGIN, TILE_SIZE, TILE_SIZE, C
 # far down the tile's sides the flap's edges begin (clear of the corners).
 FLAP_TIP_Y = 566
 FLAP_SHOULDER_Y = 176
-BAND_WIDTH = 42
-SEAL_RADIUS = 118
+BAND_WIDTH = 38        # the flap's band, and the band round the tile's edge
+SEAL_RADIUS = 160      # the wax's mean radius
 LOWER_FOLD_Y = 612     # where the side and bottom folds meet, under the seal
 
 
@@ -146,18 +149,53 @@ def _envelope():
     return parts, flap, (cx, FLAP_TIP_Y)
 
 
+def _wax_outline(cx, cy, r, points=144):
+    """A blob of sealing wax: a circle whose edge ripples where the wax
+    spread when the seal was pressed (a smooth closed path)."""
+    pts = []
+    for i in range(points):
+        t = 2 * math.pi * i / points
+        k = (1 + 0.026 * math.sin(3 * t + 0.4) + 0.020 * math.sin(5 * t + 2.1)
+             + 0.030 * math.sin(9 * t + 0.9) + 0.016 * math.sin(13 * t + 2.5)
+             + 0.008 * math.sin(23 * t + 1.2))
+        pts.append((cx + r * k * math.cos(t), cy + r * k * math.sin(t)))
+    # Catmull-Rom through the points, as cubic Beziers.
+    d = [f"M{pts[0][0]:.1f},{pts[0][1]:.1f}"]
+    n = len(pts)
+    for i in range(n):
+        p0, p1, p2, p3 = pts[i - 1], pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        d.append(f"C{c1[0]:.1f},{c1[1]:.1f} {c2[0]:.1f},{c2[1]:.1f} {p2[0]:.1f},{p2[1]:.1f}")
+    return " ".join(d) + " Z"
+
+
 def _seal(cx, cy, r):
-    """A glossy green seal with a white check mark, in a white ring."""
-    check = (f"M{cx - r * 0.42:.1f},{cy + r * 0.02:.1f} L{cx - r * 0.12:.1f},{cy + r * 0.32:.1f} "
-             f"L{cx + r * 0.46:.1f},{cy - r * 0.30:.1f}")
+    """A classic wax seal: a glossy blob of green wax with a round recess
+    where the stamp was pressed, and a check mark standing up in relief."""
+    inner = r * 0.70
+    s = inner * 0.98  # the check mark's scale
+    check = (f"M{cx - s * 0.46:.1f},{cy + s * 0.02:.1f} L{cx - s * 0.13:.1f},{cy + s * 0.34:.1f} "
+             f"L{cx + s * 0.48:.1f},{cy - s * 0.32:.1f}")
+    stroke = f'fill="none" stroke-width="{s * 0.19:.1f}" stroke-linecap="round" stroke-linejoin="round"'
     return [
-        f'<g filter="url(#sealshadow)"><circle cx="{cx}" cy="{cy}" r="{r + 12}" fill="#FFFFFF"/></g>',
-        f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="url(#face)"/>',
-        f'<path d="{check}" fill="none" stroke="{FEATURES}" stroke-width="{r * 0.2:.1f}" '
-        'stroke-linecap="round" stroke-linejoin="round"/>',
-        # specular highlight
-        f'<ellipse cx="{cx - r * 0.30:.1f}" cy="{cy - r * 0.55:.1f}" rx="{r * 0.38:.1f}" '
-        f'ry="{r * 0.18:.1f}" fill="#FFFFFF" opacity="0.45"/>',
+        f'<g filter="url(#sealshadow)"><path d="{_wax_outline(cx, cy, r)}" fill="url(#wax)"/></g>',
+        # A soft rim of thicker wax round the stamp's recess.
+        f'<circle cx="{cx}" cy="{cy}" r="{inner + r * 0.09:.1f}" fill="none" stroke="url(#waxrim)" '
+        f'stroke-width="{r * 0.07:.1f}"/>',
+        # The recess: shaded the other way round from the blob, so it reads
+        # as pressed in.
+        f'<circle cx="{cx}" cy="{cy}" r="{inner:.1f}" fill="url(#press)"/>',
+        f'<circle cx="{cx}" cy="{cy}" r="{inner:.1f}" fill="none" stroke="{WAX_DARK}" stroke-opacity="0.45" '
+        f'stroke-width="{r * 0.025:.1f}"/>',
+        # The check mark in relief: its shadow, then the raised stroke.
+        f'<path d="{check}" stroke="{FEATURE_SHADOW}" stroke-opacity="0.55" {stroke} '
+        f'transform="translate({s * 0.035:.1f},{s * 0.05:.1f})"/>',
+        f'<path d="{check}" stroke="{FEATURES}" {stroke}/>',
+        # Gloss on the wax.
+        f'<ellipse cx="{cx - r * 0.42:.1f}" cy="{cy - r * 0.62:.1f}" rx="{r * 0.30:.1f}" '
+        f'ry="{r * 0.12:.1f}" fill="#FFFFFF" opacity="0.40" '
+        f'transform="rotate(-28 {cx - r * 0.42:.1f} {cy - r * 0.62:.1f})"/>',
     ]
 
 
@@ -187,9 +225,15 @@ def icon_svg():
         '<linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">'
         f'<stop offset="0" stop-color="{EDGE}" stop-opacity="0.45"/>'
         f'<stop offset="1" stop-color="{EDGE}" stop-opacity="0.9"/></linearGradient>',
-        '<radialGradient id="face" cx="0.38" cy="0.30" r="0.8">'
-        f'<stop offset="0" stop-color="{FACE_LIGHT}"/><stop offset="0.55" stop-color="{FACE_MID}"/>'
-        f'<stop offset="1" stop-color="{FACE_DARK}"/></radialGradient>',
+        '<radialGradient id="wax" cx="0.36" cy="0.30" r="0.80">'
+        f'<stop offset="0" stop-color="{WAX_LIGHT}"/><stop offset="0.55" stop-color="{WAX_MID}"/>'
+        f'<stop offset="1" stop-color="{WAX_DARK}"/></radialGradient>',
+        '<linearGradient id="press" x1="0.15" y1="0.1" x2="0.85" y2="0.9">'
+        f'<stop offset="0" stop-color="{WAX_PRESS_DARK}"/><stop offset="1" stop-color="{WAX_PRESS_LIGHT}"/>'
+        '</linearGradient>',
+        '<linearGradient id="waxrim" x1="0.15" y1="0.1" x2="0.85" y2="0.9">'
+        f'<stop offset="0" stop-color="{WAX_LIGHT}" stop-opacity="0.85"/>'
+        f'<stop offset="1" stop-color="{WAX_DARK}" stop-opacity="0.7"/></linearGradient>',
         f'<clipPath id="clip"><path d="{TILE}"/></clipPath>',
         f'<clipPath id="flapclip"><path d="{flap}"/></clipPath>',
         # Apple template shadow: black, 28 px blur radius, 12 px down, 50 %.
@@ -199,13 +243,16 @@ def icon_svg():
         '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
         _tinted_shadow("flapshadow", 18, 18, 0.42),
         _tinted_shadow("foldshadow", 10, -6, 0.12),
-        _tinted_shadow("sealshadow", 12, 12, 0.45),
+        _tinted_shadow("sealshadow", 14, 14, 0.50),
     ]
     parts = [
         f'<g filter="url(#shadow)"><path d="{TILE}" fill="#FFFFFF"/></g>',
         '<g clip-path="url(#clip)">',
         *envelope,
-        *_seal(cx, tip - 6, SEAL_RADIUS),
+        # The band continues round the whole edge of the envelope (the
+        # tile's outline, stroked and clipped, so only its inner half shows).
+        f'<path d="{TILE}" fill="none" stroke="url(#band)" stroke-width="{BAND_WIDTH * 2}"/>',
+        *_seal(cx, tip - 4, SEAL_RADIUS),
         '<rect x="100" y="100" width="824" height="824" fill="url(#sheen)"/>',
         '</g>',
         # A faint edge, so the white tile holds its shape on a white background.
