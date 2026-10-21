@@ -2,11 +2,13 @@
 """Generate the app icon: Resources/AppIcon.svg (vector master) and
 Resources/AppIcon.icns (every macOS size, rendered natively from the vector).
 
-The design is a frosted-glass envelope sealed with a green check mark (an
-email that has been dealt with), in the "Sage" palette (mint to sage green),
-drawn in the macOS 26 Liquid Glass style: soft gradients, translucent layers
-and bright specular rims. It follows the icons of QDVC Nice Mail and QDVC
-Bibliotheca for macOS, so the apps look like a family.
+The design is the back of a white envelope that fills the whole tile, its
+top flap folded down to the middle with a mint band along the flap's edge,
+and sealed there with a glossy green check mark (an email that has been
+dealt with). Like QDVC Progress for macOS, the subject is the tile itself
+rather than an emblem on a background; the mint keeps the family's earlier
+"Sage" palette. Soft folds, tinted shadows and a light top sheen give the
+depth of the macOS 26 icon style.
 
 Geometry follows Apple's macOS icon template: a 1024x1024 canvas holding an
 824x824 tile (100 px transparent margin) with a 185.4 px continuous-curvature
@@ -36,11 +38,16 @@ ROOT = Path(__file__).resolve().parents[1]
 RESOURCES = ROOT / "Resources"
 
 # ---------------------------------------------------------------------------
-# Palette ("Sage"). The deep tone also tints the envelope's shadows, so the
-# white glass stays distinct from the pale background.
+# Palette. The envelope is white paper; the mint ("Sage") of the family's
+# earlier icon survives as the band along the flap's edge and in the
+# shadows the folds cast.
 
-BG_TOP = "#EEF8F0"
-BG_DEEP = "#7FB98F"
+PAPER_TOP, PAPER_BOTTOM = "#FFFFFF", "#F1F5F2"
+SIDE_FOLD, BOTTOM_FOLD = "#E2EBE5", "#F3F7F4"
+FOLD_LINE = "#C9D8CD"
+SHADOW_TINT = "#5E9C70"
+BAND_LIGHT, BAND_DEEP = "#86D7A2", "#43AE6C"
+EDGE = "#C6CFC8"
 
 # The seal: a green sphere with a white check mark.
 FACE_LIGHT, FACE_MID, FACE_DARK = "#B8F0C8", "#34C26A", "#1E8C4A"
@@ -89,49 +96,54 @@ def continuous_rounded_rect(x, y, w, h, r):
 
 TILE = continuous_rounded_rect(TILE_ORIGIN, TILE_ORIGIN, TILE_SIZE, TILE_SIZE, CORNER_RADIUS)
 
-# The envelope (x, y, width, height) and the seal's radius. The seal sits on
-# the point of the flap.
-ENVELOPE = (212, 318, 600, 400)
-SEAL_RADIUS = 128
+# The envelope is the tile: its back, with the top flap folded down to a
+# point a little below the middle, where the seal sits. FLAP_SHOULDER is how
+# far down the tile's sides the flap's edges begin (clear of the corners).
+FLAP_TIP_Y = 566
+FLAP_SHOULDER_Y = 176
+BAND_WIDTH = 42
+SEAL_RADIUS = 118
+LOWER_FOLD_Y = 612     # where the side and bottom folds meet, under the seal
 
 
-def _hex2rgb(h):
-    h = h.lstrip("#")
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
-
-
-def _mix(a, b, t):
-    ra, rb = _hex2rgb(a), _hex2rgb(b)
-    return "#%02X%02X%02X" % tuple(round(x + (y - x) * t) for x, y in zip(ra, rb))
+def _flap_edge():
+    """The flap's lower edge: shoulder to shoulder through a rounded tip."""
+    left, right = TILE_ORIGIN, TILE_ORIGIN + TILE_SIZE
+    cx = left + TILE_SIZE / 2
+    k = 46  # how far either side of the tip the rounding starts
+    slope = (FLAP_TIP_Y - FLAP_SHOULDER_Y) / (cx - left)
+    return (f"M{left - 40},{FLAP_SHOULDER_Y - 40 * slope:.1f} "
+            f"L{cx - k},{FLAP_TIP_Y - k * slope:.1f} "
+            f"Q{cx},{FLAP_TIP_Y + k * slope * 0.35:.1f} {cx + k},{FLAP_TIP_Y - k * slope:.1f} "
+            f"L{right + 40},{FLAP_SHOULDER_Y - 40 * slope:.1f}")
 
 
 def _envelope():
-    """The frosted-glass envelope, flap closed. Returns (elements, flap tip)."""
-    x, y, w, h = ENVELOPE
-    cx = x + w / 2
-    tip = y + h * 0.56
-    flap = (f"M{x + 14},{y + 26} Q{x + 6},{y + 4} {x + 40},{y} L{x + w - 40},{y} "
-            f"Q{x + w - 6},{y + 4} {x + w - 14},{y + 26} L{cx + 34},{tip - 22} "
-            f"Q{cx},{tip + 8} {cx - 34},{tip - 22} Z")
+    """The back of the envelope, filling the tile. Returns (elements, tip)."""
+    left, top = TILE_ORIGIN, TILE_ORIGIN
+    right, bottom = left + TILE_SIZE, top + TILE_SIZE
+    cx = left + TILE_SIZE / 2
+    edge = _flap_edge()
+    flap = f"{edge} L{right + 40},{top - 40} L{left - 40},{top - 40} Z"
     parts = [
-        f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="46" fill="url(#glass)"/>',
-        # bottom folds
-        f'<path d="M{x + 30},{y + h - 18} L{cx},{y + h * 0.50} L{x + w - 30},{y + h - 18}" fill="none" '
-        'stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="10" stroke-linecap="round" '
+        f'<rect x="{left}" y="{top}" width="{TILE_SIZE}" height="{TILE_SIZE}" fill="url(#paper)"/>',
+        # The side folds, then the bottom fold over them.
+        f'<path d="M{left},{top} L{cx},{LOWER_FOLD_Y} L{left},{bottom} Z" fill="{SIDE_FOLD}"/>',
+        f'<path d="M{right},{top} L{cx},{LOWER_FOLD_Y} L{right},{bottom} Z" fill="{SIDE_FOLD}"/>',
+        f'<path d="M{left - 20},{bottom + 20} L{cx},{LOWER_FOLD_Y + 26} L{right + 20},{bottom + 20} Z" '
+        f'fill="url(#bottomfold)" filter="url(#foldshadow)"/>',
+        f'<path d="M{left - 20},{bottom + 20} L{cx},{LOWER_FOLD_Y + 26} L{right + 20},{bottom + 20}" '
+        f'fill="none" stroke="{FOLD_LINE}" stroke-width="4" stroke-linejoin="round"/>',
+        # The top flap, casting a soft shadow on the folds below it.
+        f'<path d="{flap}" fill="url(#flap)" filter="url(#flapshadow)"/>',
+        # The mint band along the flap's edge (the stroke, clipped to the
+        # flap, so only its inner half shows), with a fine white rule.
+        f'<g clip-path="url(#flapclip)"><path d="{edge}" fill="none" stroke="url(#band)" '
+        f'stroke-width="{BAND_WIDTH * 2}" stroke-linejoin="round"/></g>',
+        f'<path d="{edge}" fill="none" stroke="{BAND_DEEP}" stroke-opacity="0.55" stroke-width="3" '
         'stroke-linejoin="round"/>',
-        # the flap's soft shadow on the body, the flap, then its crisp edge
-        f'<path d="M{x + 18},{y + 34} L{cx - 34},{tip - 14} Q{cx},{tip + 22} {cx + 34},{tip - 14} '
-        f'L{x + w - 18},{y + 34}" fill="none" stroke="{BG_DEEP}" stroke-opacity="0.22" '
-        'stroke-width="22" stroke-linejoin="round" stroke-linecap="round"/>',
-        f'<path d="{flap}" fill="url(#glassflap)"/>',
-        f'<path d="M{x + 16},{y + 28} L{cx - 34},{tip - 22} Q{cx},{tip + 8} {cx + 34},{tip - 22} '
-        f'L{x + w - 16},{y + 28}" fill="none" stroke="{BG_DEEP}" stroke-opacity="0.38" '
-        'stroke-width="5" stroke-linejoin="round"/>',
-        # glass rim
-        f'<rect x="{x + 2}" y="{y + 2}" width="{w - 4}" height="{h - 4}" rx="44" fill="none" '
-        'stroke="url(#rim)" stroke-width="4"/>',
     ]
-    return parts, (cx, tip)
+    return parts, flap, (cx, FLAP_TIP_Y)
 
 
 def _seal(cx, cy, r):
@@ -139,7 +151,7 @@ def _seal(cx, cy, r):
     check = (f"M{cx - r * 0.42:.1f},{cy + r * 0.02:.1f} L{cx - r * 0.12:.1f},{cy + r * 0.32:.1f} "
              f"L{cx + r * 0.46:.1f},{cy - r * 0.30:.1f}")
     return [
-        f'<circle cx="{cx}" cy="{cy}" r="{r + 10}" fill="#FFFFFF" opacity="0.9"/>',
+        f'<g filter="url(#sealshadow)"><circle cx="{cx}" cy="{cy}" r="{r + 12}" fill="#FFFFFF"/></g>',
         f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="url(#face)"/>',
         f'<path d="{check}" fill="none" stroke="{FEATURES}" stroke-width="{r * 0.2:.1f}" '
         'stroke-linecap="round" stroke-linejoin="round"/>',
@@ -149,57 +161,55 @@ def _seal(cx, cy, r):
     ]
 
 
+def _tinted_shadow(fid, blur, dy, opacity):
+    return (f'<filter id="{fid}" x="-30%" y="-30%" width="160%" height="160%">'
+            f'<feGaussianBlur in="SourceAlpha" stdDeviation="{blur}"/><feOffset dx="0" dy="{dy}"/>'
+            f'<feFlood flood-color="{SHADOW_TINT}" flood-opacity="{opacity}"/>'
+            '<feComposite operator="in" in2="SourceAlpha"/>'
+            '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>')
+
+
 def icon_svg():
     sigma = SHADOW_BLUR_RADIUS / 2
+    envelope, flap, (cx, tip) = _envelope()
     defs = [
-        f'<linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1">'
-        f'<stop offset="0" stop-color="{BG_TOP}"/><stop offset="1" stop-color="{BG_DEEP}"/></linearGradient>',
-        '<radialGradient id="glow" cx="0.30" cy="0.18" r="0.75">'
-        '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.34"/>'
-        '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>',
+        f'<linearGradient id="paper" x1="0" y1="0" x2="0.2" y2="1">'
+        f'<stop offset="0" stop-color="{PAPER_TOP}"/><stop offset="1" stop-color="{PAPER_BOTTOM}"/></linearGradient>',
+        f'<linearGradient id="bottomfold" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="{BOTTOM_FOLD}"/></linearGradient>',
+        '<linearGradient id="flap" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="{PAPER_BOTTOM}"/></linearGradient>',
+        '<linearGradient id="band" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0.3" stop-color="{BAND_LIGHT}"/><stop offset="1" stop-color="{BAND_DEEP}"/></linearGradient>',
         '<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">'
-        '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>'
-        '<stop offset="0.40" stop-color="#FFFFFF" stop-opacity="0.03"/>'
-        '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>',
-        '<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">'
-        '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.9"/>'
-        '<stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.3"/>'
-        '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0.6"/></linearGradient>',
+        '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/>'
+        '<stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>',
         '<linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">'
-        '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.75"/>'
-        '<stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.12"/>'
-        '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0.35"/></linearGradient>',
-        '<linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">'
-        '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.78"/>'
-        f'<stop offset="1" stop-color="{_mix("#FFFFFF", BG_DEEP, 0.25)}" stop-opacity="0.55"/></linearGradient>',
-        '<linearGradient id="glassflap" x1="0" y1="0" x2="0" y2="1">'
-        '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/>'
-        '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0.62"/></linearGradient>',
+        f'<stop offset="0" stop-color="{EDGE}" stop-opacity="0.45"/>'
+        f'<stop offset="1" stop-color="{EDGE}" stop-opacity="0.9"/></linearGradient>',
         '<radialGradient id="face" cx="0.38" cy="0.30" r="0.8">'
         f'<stop offset="0" stop-color="{FACE_LIGHT}"/><stop offset="0.55" stop-color="{FACE_MID}"/>'
         f'<stop offset="1" stop-color="{FACE_DARK}"/></radialGradient>',
         f'<clipPath id="clip"><path d="{TILE}"/></clipPath>',
+        f'<clipPath id="flapclip"><path d="{flap}"/></clipPath>',
         # Apple template shadow: black, 28 px blur radius, 12 px down, 50 %.
         '<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">'
         f'<feGaussianBlur in="SourceAlpha" stdDeviation="{sigma}"/><feOffset dy="{SHADOW_OFFSET_Y}"/>'
         f'<feComponentTransfer><feFuncA type="linear" slope="{SHADOW_OPACITY}"/></feComponentTransfer>'
         '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-        # Tinted shadow under the envelope and seal.
-        '<filter id="objshadow" x="-30%" y="-30%" width="160%" height="160%">'
-        '<feGaussianBlur in="SourceAlpha" stdDeviation="14"/><feOffset dx="0" dy="16"/>'
-        f'<feFlood flood-color="{BG_DEEP}" flood-opacity="0.55"/><feComposite operator="in" in2="SourceAlpha"/>'
-        '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
+        _tinted_shadow("flapshadow", 18, 18, 0.42),
+        _tinted_shadow("foldshadow", 10, -6, 0.12),
+        _tinted_shadow("sealshadow", 12, 12, 0.45),
     ]
-    envelope, (cx, tip) = _envelope()
-    objects = envelope + _seal(cx, tip - 4, SEAL_RADIUS)
     parts = [
-        f'<g filter="url(#shadow)"><path d="{TILE}" fill="url(#bg)"/></g>',
+        f'<g filter="url(#shadow)"><path d="{TILE}" fill="#FFFFFF"/></g>',
         '<g clip-path="url(#clip)">',
-        '<rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>',
-        '<g filter="url(#objshadow)">', *objects, '</g>',
+        *envelope,
+        *_seal(cx, tip - 6, SEAL_RADIUS),
         '<rect x="100" y="100" width="824" height="824" fill="url(#sheen)"/>',
         '</g>',
-        f'<path d="{TILE}" fill="none" stroke="url(#edge)" stroke-width="6"/>',
+        # A faint edge, so the white tile holds its shape on a white background.
+        f'<path d="{TILE}" fill="none" stroke="url(#edge)" stroke-width="3"/>',
     ]
     return ('<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">'
             f'<defs>{"".join(defs)}</defs>{"".join(parts)}</svg>\n')

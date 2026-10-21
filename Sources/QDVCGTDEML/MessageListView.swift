@@ -51,9 +51,14 @@ struct MessageListView: View {
         ForEach(records) { r in
             MessageRow(record: r)
                 .tag(r.id)
-                .onDrag {
-                    // Recorded so sidebar entries can tell, while the drag
-                    // hovers over them, whether they would take it.
+                // The list's own dragging (not .onDrag, whose gesture on the
+                // row's content stopped clicks on the text from selecting and
+                // left the blank areas to drag-select): the table selects on
+                // click and drags the selected rows from anywhere in them. It
+                // asks each dragged row for its data when the drag starts,
+                // which is when the rows are recorded for the sidebar's
+                // hover check.
+                .itemProvider {
                     model.beginDrag(r.id)
                     return NSItemProvider(object: r.id as NSString)
                 }
@@ -230,6 +235,16 @@ struct MessageContextMenu: View {
         let pinTitle: String = records.allSatisfy(\.isPinned) && !records.isEmpty ? "Unpin" : "Pin"
         Button(pinTitle) { model.togglePin(ids) }
             .disabled(!records.contains { $0.folder != .input })
+        if !model.config.monitoredHashtags.isEmpty {
+            // The same as dropping the emails on a hashtag mailbox: only
+            // emails with no next action take the tag.
+            Menu(model.tagMenuTitle(ids)) {
+                ForEach(model.config.monitoredHashtags, id: \.self) { tag in
+                    Button(tag) { model.applyHashtag(ids, tag: tag) }
+                }
+            }
+            .disabled(!model.canTag(ids))
+        }
         if let single {
             Button("Edit Annotations") { model.beginEdit(single.id) }
                 .disabled(model.annotationsRefusal(single) != nil)

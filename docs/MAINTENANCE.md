@@ -57,9 +57,12 @@ since it does not import SwiftUI.
 ### 1.1 App icon
 
 `tools/make_icon.py` writes `Resources/AppIcon.svg` and `Resources/AppIcon.icns`
-(needs `rsvg-convert`; `brew install librsvg`). The design is the family's
-frosted-glass envelope, sealed with a green check mark, in a sage palette.
-`--preview` also writes `build/icon-preview.png`.
+(needs `rsvg-convert`; `brew install librsvg`). The design is the back of a
+white envelope filling the whole tile (Apple's template geometry), its flap
+folded down to the middle with a mint band along its edge and sealed there
+with a green check mark. As in QDVC Progress for macOS, the subject is the
+tile itself rather than an emblem on a coloured background. `--preview`
+also writes `build/icon-preview.png`.
 
 ## 2. Modules
 

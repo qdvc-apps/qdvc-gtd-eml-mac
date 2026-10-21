@@ -130,6 +130,7 @@ workflow order, an exact name first and then a case-insensitive one.
 | `close … with …` | Message → Close With… (sheet: pick the closing email) | Close With… | ⌥⌘K | — |
 | `pin` / `unpin` | Message → Pin / Unpin | Pin | ⇧⌘L | Flag |
 | `metadata set` | inline in the reading pane; Message → Edit Annotations… (⌘E) | — | ⌘E | — |
+| `metadata set next_action` (blank only) | Message → Set Next Action ▸ hashtag; drag to a hashtag mailbox | — | — | — |
 | `workflow_autofix` | Workflow → Review Date Stamps… (sheet listing every proposed stamp, one Apply button) | banner | — | — |
 | `metadata_check` | Workflow → Check Metadata… (report sheet) | — | — | — |
 | `view` | Message → Open in Mail / Quick Look | — | ⌘↓ / ⌘Y | Open Message |
@@ -149,6 +150,10 @@ Also:
   there is no alert to dismiss afterwards. A drop that some of the emails
   refuse is applied to the others, and the rest are listed in an alert, as
   for a partly refused move. The same hover check applies to folders.
+  Message → Set Next Action ▸ (and the row's context menu) lists the
+  monitored hashtags and does the same as the drop. Rows use the list's
+  own dragging (`itemProvider`), so a click anywhere on a row selects it
+  and a drag from anywhere on it carries the whole selection, as in Mail.
   Dropping `.eml` files from Finder or Mail onto the window copies them
   into `01-input`.
 - **Go to folder:** ⌘1 – ⌘6 select the six Workflow folders, as ⌘1… select

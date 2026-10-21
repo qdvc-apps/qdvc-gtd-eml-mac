@@ -110,6 +110,14 @@ struct GTDCommands: Commands {
             }
             .keyboardShortcut("l", modifiers: [.command, .shift])
             .disabled(!model.selectedRecords.contains { $0.folder != .input })
+            if !model.config.monitoredHashtags.isEmpty {
+                Menu(model.tagMenuTitle(ids)) {
+                    ForEach(model.config.monitoredHashtags, id: \.self) { tag in
+                        Button(tag) { model.applyHashtag(ids, tag: tag) }
+                    }
+                }
+                .disabled(!model.canTag(ids))
+            }
             Button("Edit Annotations") { model.beginEdit(single?.id) }
                 .keyboardShortcut("e")
                 .disabled(single.map { model.annotationsRefusal($0) != nil } ?? true)

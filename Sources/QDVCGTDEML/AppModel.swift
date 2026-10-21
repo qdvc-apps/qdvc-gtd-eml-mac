@@ -831,6 +831,22 @@ final class AppModel {
         return nil
     }
 
+    /// True when at least one of `ids` can take a hashtag as its next action
+    /// (Set Next Action, or a drop on a hashtag mailbox).
+    func canTag(_ ids: [String]) -> Bool {
+        ids.contains { id in record(id).map { tagRefusal($0) == nil } ?? false }
+    }
+
+    /// The Set Next Action submenu's title, naming the reason it is
+    /// unavailable for a single email, as Move To's items do.
+    func tagMenuTitle(_ ids: [String]) -> String {
+        let title = "Set Next Action"
+        guard ids.count == 1, let r = record(ids.first) else { return title }
+        if r.folder == .input { return title + " \u{2014} Ingest it first" }
+        if !r.nextAction.isEmpty { return title + " \u{2014} Already has one" }
+        return title
+    }
+
     /// Why dropping `ids` on a sidebar entry would do nothing, or nil when at
     /// least one of them would be moved or tagged.
     func dropRefusal(_ ids: [String], on item: SidebarItem) -> String? {
