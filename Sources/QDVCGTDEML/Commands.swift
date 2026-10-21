@@ -8,6 +8,10 @@ import GTDCore
 @MainActor
 struct GTDCommands: Commands {
     @Bindable var model: AppModel
+    /// Set while a message window (tab) is key: the Message menu then acts
+    /// on its email rather than the viewer's selection.
+    @FocusedValue(\.messageWindow) var focusedMessage: MessageWindowFocus?
+    @Environment(\.openWindow) var openWindow
 
     var body: some Commands {
         SidebarCommands()
@@ -41,19 +45,16 @@ struct GTDCommands: Commands {
         }
 
         CommandGroup(after: .toolbar) {
+            // No shortcuts: \u{2318}1\u{2013}\u{2318}9 select tabs (Window menu).
             Button("Dashboard") { go(.dashboard) }
-                .keyboardShortcut("0")
                 .disabled(model.workspace == nil)
             ForEach(Folder.allCases) { folder in
                 Button(folder.title) { go(.folder(folder)) }
-                    .keyboardShortcut(folder.shortcutKey)
                     .disabled(model.workspace == nil)
             }
             Button("Performance") { go(.performance) }
-                .keyboardShortcut("7")
                 .disabled(model.workspace == nil)
             Button("Calendar") { go(.calendar) }
-                .keyboardShortcut("8")
                 .disabled(model.workspace == nil)
             Divider()
             Toggle("Show Date Headings", isOn: $model.showDateHeadings)
@@ -74,8 +75,15 @@ struct GTDCommands: Commands {
         }
 
         CommandMenu("Message") {
-            let ids = model.selectedRecords.map(\.id)
-            let single = model.selectedRecord
+            let focus = focusedMessage
+            let ids: [String] = focus.map { [$0.recordID] } ?? model.selectedRecords.map(\.id)
+            let single: EmailRecord? = focus != nil ? model.record(focus?.recordID) : model.selectedRecord
+            let records = ids.compactMap { model.record($0) }
+            Button(ids.count > 1 ? "Open in New Tabs" : "Open in New Tab") {
+                model.openInNewTab(ids) { openWindow(id: AppModel.messageWindowID, value: $0) }
+            }
+            // A message window already shows its email.
+            .disabled(ids.isEmpty || focus != nil)
             Button("Open in Mail") { model.openInMail(ids) }
                 .keyboardShortcut(.downArrow, modifiers: [.command])
                 .disabled(ids.isEmpty)
@@ -104,12 +112,12 @@ struct GTDCommands: Commands {
                 .keyboardShortcut("k", modifiers: [.command, .option])
                 .disabled(single.map { model.closeRefusal($0) != nil } ?? true)
             Divider()
-            let pinTitle: String = model.selectedRecords.allSatisfy(\.isPinned) && !ids.isEmpty ? "Unpin" : "Pin"
+            let pinTitle: String = records.allSatisfy(\.isPinned) && !ids.isEmpty ? "Unpin" : "Pin"
             Button(pinTitle) {
                 model.togglePin(ids)
             }
             .keyboardShortcut("l", modifiers: [.command, .shift])
-            .disabled(!model.selectedRecords.contains { $0.folder != .input })
+            .disabled(!records.contains { $0.folder != .input })
             if !model.config.monitoredHashtags.isEmpty {
                 Menu(model.tagMenuTitle(ids)) {
                     ForEach(model.config.monitoredHashtags, id: \.self) { tag in
@@ -118,9 +126,26 @@ struct GTDCommands: Commands {
                 }
                 .disabled(!model.canTag(ids))
             }
-            Button("Edit Annotations") { model.beginEdit(single?.id) }
-                .keyboardShortcut("e")
-                .disabled(single.map { model.annotationsRefusal($0) != nil } ?? true)
+            Button("Edit Annotations") {
+                model.beginEdit(single?.id, context: focus?.context ?? AppModel.viewerContext)
+            }
+            .keyboardShortcut("e")
+            .disabled(single.map { model.annotationsRefusal($0) != nil } ?? true)
+        }
+
+        CommandGroup(after: .windowArrangement) {
+            Divider()
+            Button("Reopen Closed Tab") {
+                model.reopenClosedTab { openWindow(id: AppModel.messageWindowID, value: $0) }
+            }
+            .keyboardShortcut("t", modifiers: [.command, .shift])
+            .disabled(!model.canReopenTab)
+            Menu("Select Tab") {
+                ForEach(1...9, id: \.self) { n in
+                    Button("Tab \(n)") { Platform.selectTab(n) }
+                        .keyboardShortcut(KeyEquivalent(Character(String(n))), modifiers: .command)
+                }
+            }
         }
 
         CommandMenu("Workflow") {

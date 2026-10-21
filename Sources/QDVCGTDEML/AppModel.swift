@@ -37,6 +37,13 @@ enum SortKey: String, CaseIterable, Identifiable {
     }
 }
 
+/// What a message window (a tab) shows: an email of a workspace, by file
+/// name, which survives moves between folders.
+struct MessageRef: Codable, Hashable {
+    let workspace: String
+    let filename: String
+}
+
 /// A request for the message list to scroll a row into view (a new token
 /// each time, so asking twice for the same row scrolls twice).
 struct RevealRequest: Equatable {
@@ -80,6 +87,8 @@ final class AppModel {
     private(set) var configError: String?
     private(set) var records: [EmailRecord] = []
     private(set) var recordsByID: [String: EmailRecord] = [:]
+    /// The first record of each file name in workflow order (as `find`).
+    private(set) var recordsByFilename: [String: EmailRecord] = [:]
     private(set) var metrics: [EmailMetrics] = []
     private(set) var autofix = AutofixPlan(pendingInput: 0, fixes: [], blockers: [])
     private(set) var overview = Overview([])
@@ -107,13 +116,22 @@ final class AppModel {
     }
     var selection: Set<String> = [] {
         didSet {
-            if let editing = editingAnnotationsID, !selection.contains(editing) { editingAnnotationsID = nil }
+            if let editing = editingAnnotationsID, editingContext == AppModel.viewerContext,
+               !selection.contains(editing) { editingAnnotationsID = nil }
         }
     }
     var searchText = ""
     var collapsedGroups: Set<String> = []
-    var activeSheet: ActiveSheet?
-    var alert: AlertInfo?
+    /// Sheets and alerts appear on the window that was key when they were
+    /// asked for (the viewer or a message tab), see `activeContext`.
+    var activeSheet: ActiveSheet? {
+        didSet { if activeSheet != nil && oldValue == nil { sheetContext = activeContext } }
+    }
+    var alert: AlertInfo? {
+        didSet { if alert != nil { alertContext = activeContext } }
+    }
+    private(set) var sheetContext = AppModel.viewerContext
+    private(set) var alertContext = AppModel.viewerContext
     var quickLookURL: URL?
     /// Set by `reveal` for the message list to scroll to.
     var revealRequest: RevealRequest?
@@ -122,8 +140,10 @@ final class AppModel {
     /// Why the sidebar entry under a drag won't take it (shown as the
     /// window subtitle while hovering).
     var dropHint: String?
-    /// The record whose annotations card is in edit mode.
+    /// The record whose annotations card is in edit mode, and the window
+    /// (context) it is being edited in.
     var editingAnnotationsID: String?
+    private(set) var editingContext = AppModel.viewerContext
     private(set) var recentWorkspaces: [String] = Prefs.recentWorkspaces
 
     var sortKey: SortKey = Prefs.sortKey { didSet { Prefs.sortKey = sortKey } }
@@ -406,6 +426,8 @@ final class AppModel {
         searchText = ""
         records = []
         recordsByID = [:]
+        recordsByFilename = [:]
+        closedTabs = []
         hasLoaded = false
         loader.clear()
         workspace = ws
@@ -423,6 +445,8 @@ final class AppModel {
         workspace = nil
         records = []
         recordsByID = [:]
+        recordsByFilename = [:]
+        closedTabs = []
         metrics = []
         overview = Overview([])
         history = .empty
@@ -481,8 +505,13 @@ final class AppModel {
     private func apply(_ snapshot: WorkspaceSnapshot, select: Set<String>?) {
         records = snapshot.records
         var byID: [String: EmailRecord] = [:]
-        for r in snapshot.records { byID[r.id] = r }
+        var byName: [String: EmailRecord] = [:]
+        for r in snapshot.records {
+            byID[r.id] = r
+            if byName[r.filename] == nil { byName[r.filename] = r }
+        }
         recordsByID = byID
+        recordsByFilename = byName
         metrics = snapshot.metrics
         autofix = snapshot.autofix
         metadataRows = snapshot.metadataRows
@@ -611,7 +640,8 @@ final class AppModel {
         guard let ws = workspace else { return }
         var refusals: [String] = []
         var newIDs = Set<String>()
-        fallbackSelection = neighbour(of: Set(ids))
+        let inViewer = actingInViewer
+        if inViewer { fallbackSelection = neighbour(of: Set(ids)) }
         for id in ids {
             guard let r = record(id) else { continue }
             if r.folder == .input {
@@ -626,7 +656,7 @@ final class AppModel {
             }
         }
         if !newIDs.isEmpty { flash("Moved \(newIDs.count) to \(dest.title).") }
-        reload(select: newIDs)
+        reload(select: inViewer ? newIDs : nil)
         if !refusals.isEmpty {
             alert = AlertInfo(title: refusals.count == 1 ? "Could Not Move Email" : "Some Emails Were Not Moved",
                               message: refusals.joined(separator: "\n\n"))
@@ -649,11 +679,12 @@ final class AppModel {
 
     func close(_ id: String, with otherID: String) {
         guard let ws = workspace, let r = record(id), let other = record(otherID) else { return }
-        fallbackSelection = neighbour(of: [id])
+        let inViewer = actingInViewer
+        if inViewer { fallbackSelection = neighbour(of: [id]) }
         do {
             try ws.close(r.filename, with: other.filename)
             flash("Closed with \(other.filename).")
-            reload(select: [Folder.archive.rawValue + "/" + r.filename])
+            reload(select: inViewer ? [Folder.archive.rawValue + "/" + r.filename] : nil)
         } catch {
             fail("Could Not Close Email", error)
             reload()
@@ -677,13 +708,16 @@ final class AppModel {
         reload()
     }
 
-    func beginEdit(_ id: String?) {
+    /// Edit an email's annotations in place, in the viewer's reading pane
+    /// or in a message tab (`context`).
+    func beginEdit(_ id: String?, context: String = AppModel.viewerContext) {
         guard let r = record(id) else { return }
         if let refusal = annotationsRefusal(r) {
             alert = AlertInfo(title: "Cannot Edit Annotations", message: refusal)
             return
         }
-        selection = [r.id]
+        editingContext = context
+        if context == AppModel.viewerContext { selection = [r.id] }
         editingAnnotationsID = r.id
     }
 
@@ -904,6 +938,142 @@ final class AppModel {
             alert = AlertInfo(title: tagged.isEmpty ? "Next Action Not Changed" : "Some Emails Were Not Changed",
                               message: refusals.joined(separator: "\n\n"))
         }
+    }
+
+    // MARK: Windows and tabs
+    //
+    // The viewer (sidebar, list, reading pane) is one window; "Open in New
+    // Tab" opens an email in a message window, added as a native tab to the
+    // window it was asked from. A message tab dragged out of the tab bar is
+    // simply a standalone message window. Only the viewer has a sidebar, a
+    // list and a selection; a message window shows one email, by file name.
+
+    static let viewerContext = "viewer"
+    static let messageWindowID = "message"
+    static let viewerWindowID = "main"
+    /// Shared by the viewer and message windows, so they tab together
+    /// (also with Window \u{203A} Merge All Windows).
+    static let tabbingIdentifier = "org.qdvc.gtdeml.viewer"
+
+    /// The window that is key: the viewer, or a message window's context.
+    private(set) var activeContext = AppModel.viewerContext
+    /// Message tabs closed this session, most recent last (Reopen Closed Tab).
+    private(set) var closedTabs: [MessageRef] = []
+    @ObservationIgnored private var openTabs: [String: MessageRef] = [:]
+    @ObservationIgnored private weak var viewerWindow: NSWindow?
+    /// The window the next message window joins as a tab.
+    @ObservationIgnored private weak var tabHost: NSWindow?
+    @ObservationIgnored private var attachedWindows = Set<ObjectIdentifier>()
+    @ObservationIgnored private var windowObservers: [ObjectIdentifier: [NSObjectProtocol]] = [:]
+
+    /// True when an action comes from the viewer, so it may move the
+    /// viewer's selection; from a message tab it leaves it alone.
+    private var actingInViewer: Bool { activeContext == AppModel.viewerContext }
+
+    func record(filename: String) -> EmailRecord? { recordsByFilename[filename] }
+
+    func messageRef(_ r: EmailRecord) -> MessageRef? {
+        workspace.map { MessageRef(workspace: $0.root.path, filename: r.filename) }
+    }
+
+    /// Open emails in new tabs of the key viewer or message window. `open`
+    /// is SwiftUI's openWindow for the message scene. An email already open
+    /// in a window is brought to the front instead.
+    func openInNewTab(_ ids: [String], open: (MessageRef) -> Void) {
+        let refs = ids.prefix(10).compactMap { id in record(id).flatMap { messageRef($0) } }
+        guard !refs.isEmpty else { return }
+        tabHost = currentTabHost()
+        refs.forEach(open)
+    }
+
+    var canReopenTab: Bool {
+        guard let path = workspace?.root.path else { return false }
+        return closedTabs.contains { $0.workspace == path }
+    }
+
+    func reopenClosedTab(open: (MessageRef) -> Void) {
+        guard let path = workspace?.root.path else { return }
+        while let ref = closedTabs.popLast() {
+            guard ref.workspace == path, recordsByFilename[ref.filename] != nil else { continue }
+            tabHost = currentTabHost()
+            open(ref)
+            return
+        }
+    }
+
+    /// Bring the viewer forward (reopening it with `openViewer` if it was
+    /// closed) and select the email in its list.
+    func showInViewer(_ id: String, openViewer: () -> Void) {
+        if let window = viewerWindow {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openViewer()
+        }
+        activeContext = AppModel.viewerContext
+        reveal(id)
+    }
+
+    private func currentTabHost() -> NSWindow? {
+        if let key = NSApp.keyWindow, key.tabbingIdentifier == AppModel.tabbingIdentifier { return key }
+        return viewerWindow
+    }
+
+    /// The viewer window has appeared (or its content was rebuilt).
+    func attachViewerWindow(_ window: NSWindow) {
+        viewerWindow = window
+        _ = prepareForTabbing(window)
+        observe(window, context: AppModel.viewerContext)
+    }
+
+    /// A message window has appeared: a new one joins the tab group of the
+    /// window it was opened from.
+    func attachMessageWindow(_ window: NSWindow, context: String) {
+        if prepareForTabbing(window), let host = tabHost, host !== window {
+            host.addTabbedWindow(window, ordered: .above)
+            window.makeKeyAndOrderFront(nil)
+        }
+        observe(window, context: context)
+    }
+
+    /// What a message window shows (nil: nothing, so closing it is not
+    /// remembered for Reopen Closed Tab).
+    func setTab(_ context: String, showing ref: MessageRef?) {
+        openTabs[context] = ref
+    }
+
+    /// True the first time a window is seen.
+    private func prepareForTabbing(_ window: NSWindow) -> Bool {
+        window.tabbingIdentifier = AppModel.tabbingIdentifier
+        if window.tabbingMode == .disallowed { window.tabbingMode = .automatic }
+        return attachedWindows.insert(ObjectIdentifier(window)).inserted
+    }
+
+    private func observe(_ window: NSWindow, context: String) {
+        let id = ObjectIdentifier(window)
+        guard windowObservers[id] == nil else { return }
+        let center = NotificationCenter.default
+        let key = center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window,
+                                     queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.activeContext = context }
+        }
+        let close = center.addObserver(forName: NSWindow.willCloseNotification, object: window,
+                                       queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.windowWillClose(id, context: context) }
+        }
+        windowObservers[id] = [key, close]
+    }
+
+    private func windowWillClose(_ id: ObjectIdentifier, context: String) {
+        windowObservers.removeValue(forKey: id)?.forEach { NotificationCenter.default.removeObserver($0) }
+        attachedWindows.remove(id)
+        if context == AppModel.viewerContext {
+            viewerWindow = nil
+        } else if let ref = openTabs.removeValue(forKey: context) {
+            closedTabs.append(ref)
+            if closedTabs.count > 20 { closedTabs.removeFirst(closedTabs.count - 20) }
+        }
+        if editingContext == context { editingAnnotationsID = nil }
+        if activeContext == context { activeContext = AppModel.viewerContext }
     }
 
     // MARK: Files

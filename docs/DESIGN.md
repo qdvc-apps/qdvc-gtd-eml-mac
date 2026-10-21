@@ -52,7 +52,8 @@ vocabulary:
 | Smart Mailboxes | Due Date Set, No Due Date, Pinned, one per monitored hashtag | `calendar.badge.clock`, `calendar`, `pin`, `number` |
 | Accounts | per own account: Inbox and Sent (only when accounts are configured) | `envelope`, `paperplane` |
 
-The sidebar is one instance throughout, so it never jumps. Inbox and Sent
+The sidebar is one instance throughout, so it never jumps. Message windows
+(§2.4) open beside it as tabs. Inbox and Sent
 list every own account's mail and disclose one entry per account. Clicking a
 Dashboard figure or project opens a temporary Results entry with the emails
 it counted.
@@ -120,6 +121,33 @@ A reference is recognised when the next action starts with "Closed with"
 after the name is allowed. It resolves as `find` would: the first folder in
 workflow order, an exact name first and then a case-insensitive one.
 
+### 2.4 Tabs and message windows
+
+As in Mail with "Prefer tabs", an email can be opened in a **message
+window**, which joins the tab group of the window it was opened from as a
+native macOS tab. The viewer window (sidebar, list, reading pane) is the
+first tab; a message tab shows just the email, with the same reading-pane
+content and a small toolbar (Show in Viewer, Archive). Dragging a message
+tab out of the tab bar leaves it a standalone message window, since that is
+what it is; Window → Merge All Windows puts it back. Only the viewer has a
+sidebar, a list and a selection.
+
+- **Opening:** Open in New Tab in the row's context menu and the Message
+  menu; Open in New Tab, or ⌘-click, on an email in the History card (as a
+  link in Safari). An email already open in a window is brought forward
+  instead of being opened twice.
+- **In a message tab,** clicking an email in the History card shows it in
+  that tab; its context menu adds Show in Viewer, which selects it in the
+  viewer's list. The Message menu acts on the tab's email, and sheets,
+  alerts and in-place editing appear in the tab where they were asked for.
+  A tab follows its email by file name, so it keeps showing it after a move.
+- **Shortcuts:** ⌘W closes a tab (the system's Close), ⌘⇧T reopens the last
+  closed message tab (Window → Reopen Closed Tab, as in Safari; ⌘⇧W stays
+  Close Workspace), ⌘1 – ⌘9 select the first to ninth tab (Window → Select
+  Tab), and ⌃⇥ / ⌃⇧⇥ move between tabs (system).
+- Closing the workspace closes its message windows; one restored from an
+  earlier session closes itself unless its workspace is the one open.
+
 ## 3. Actions (the CLI, as Mail-style commands)
 
 | CLI | Menu command | Toolbar | Shortcut | Mail precedent |
@@ -156,9 +184,9 @@ Also:
   and a drag from anywhere on it carries the whole selection, as in Mail.
   Dropping `.eml` files from Finder or Mail onto the window copies them
   into `01-input`.
-- **Go to folder:** ⌘1 – ⌘6 select the six Workflow folders, as ⌘1… select
-  favourite mailboxes in Mail. ⌘0 is the Dashboard, ⌘7 Performance and ⌘8
-  the Calendar.
+- **Go to folder:** View lists Dashboard, the six Workflow folders,
+  Performance and Calendar. They have no shortcuts: ⌘1 – ⌘9 select tabs
+  (§2.4).
 - **Context menus** on rows repeat the Message menu.
 - **No undo for moves.** Undoing an `alloc` would mean clearing a `ds_*`
   stamp, which nothing in the CLI ever does. Instead, moving is disabled

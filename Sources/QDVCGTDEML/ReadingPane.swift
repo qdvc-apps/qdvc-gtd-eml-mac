@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import GTDCore
 
@@ -7,27 +8,7 @@ struct ReadingPane: View {
 
     var body: some View {
         if let r = model.selectedRecord {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    PillRow(record: r)
-                    Text(r.subject)
-                        .font(.title2.weight(.semibold))
-                        .textSelection(.enabled)
-                    AnnotationsCard(record: r)
-                        .id("annotations-\(r.id)")
-                    let chain = model.historyChain(r)
-                    if !chain.isEmpty {
-                        HistoryCard(record: r, chain: chain)
-                    }
-                    WorkflowTrail(record: r)
-                    Divider()
-                    ThreadView(record: r)
-                        .id("thread-\(r.id)")
-                }
-                .padding(20)
-                .frame(maxWidth: 900, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            MessageDetail(record: r, context: AppModel.viewerContext) { model.reveal($0.id) }
         } else if model.selection.count > 1 {
             MultipleSelectionView()
         } else {
@@ -38,6 +19,41 @@ struct ReadingPane: View {
                 Text("No Email Selected").font(.title3).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// One email in full, as the viewer's reading pane and a message window show
+/// it. `context` names the window; `onOpenHistory` is what clicking another
+/// email in the History card does there.
+struct MessageDetail: View {
+    @Environment(AppModel.self) private var model
+    let record: EmailRecord
+    let context: String
+    let onOpenHistory: (EmailRecord) -> Void
+
+    var body: some View {
+        let r = record
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                PillRow(record: r)
+                Text(r.subject)
+                    .font(.title2.weight(.semibold))
+                    .textSelection(.enabled)
+                AnnotationsCard(record: r, context: context)
+                    .id("annotations-\(r.id)")
+                let chain = model.historyChain(r)
+                if !chain.isEmpty {
+                    HistoryCard(record: r, chain: chain, context: context, onOpen: onOpenHistory)
+                }
+                WorkflowTrail(record: r)
+                Divider()
+                ThreadView(record: r)
+                    .id("thread-\(r.id)")
+            }
+            .padding(20)
+            .frame(maxWidth: 900, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -124,6 +140,9 @@ struct Pill: View {
 struct AnnotationsCard: View {
     @Environment(AppModel.self) private var model
     let record: EmailRecord
+    /// The window it is shown in: only the window where editing began shows
+    /// the form.
+    let context: String
 
     @State private var nextAction = ""
     @State private var project = ""
@@ -133,7 +152,7 @@ struct AnnotationsCard: View {
     @State private var pickingDate = false
     @State private var pickedDate = Date()
 
-    private var editing: Bool { model.editingAnnotationsID == record.id }
+    private var editing: Bool { model.editingAnnotationsID == record.id && model.editingContext == context }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -269,7 +288,7 @@ struct AnnotationsCard: View {
         return Calendar(identifier: .gregorian).date(from: c)
     }
 
-    private func begin() { model.beginEdit(record.id) }
+    private func begin() { model.beginEdit(record.id, context: context) }
 
     private func load() {
         nextAction = record.row["next_action"] ?? ""
@@ -286,12 +305,17 @@ struct AnnotationsCard: View {
 }
 
 /// The "Closed with" chain this email is part of, earliest first, as a
-/// timeline. Clicking another email selects it (switching to its folder if
-/// the list on show does not include it).
+/// timeline. Clicking another email does `onOpen` (in the viewer: select it,
+/// switching to its folder if the list on show does not include it; in a
+/// message window: show it there). ⌘-click, or the context menu's Open in
+/// New Tab, opens it in a new tab, as a link does in Safari.
 struct HistoryCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     let record: EmailRecord
     let chain: [CloseHistory.Entry]
+    let context: String
+    let onOpen: (EmailRecord) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -308,6 +332,10 @@ struct HistoryCard: View {
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+    }
+
+    private func openInNewTab(_ r: EmailRecord) {
+        model.openInNewTab([r.id]) { openWindow(id: AppModel.messageWindowID, value: $0) }
     }
 
     private var position: String {
@@ -334,9 +362,24 @@ struct HistoryCard: View {
             .frame(width: 10)
             Group {
                 if let other, !isCurrent {
-                    Button { model.reveal(other.id) } label: { details(entry, other, isCurrent: false) }
-                        .buttonStyle(.plain)
-                        .help("Show this email (\(other.folder.title))")
+                    Button {
+                        if NSEvent.modifierFlags.contains(.command) { openInNewTab(other) } else { onOpen(other) }
+                    } label: {
+                        details(entry, other, isCurrent: false)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Show this email (\(other.folder.title)); \u{2318}-click to open it in a new tab")
+                    .contextMenu {
+                        Button("Open in New Tab") { openInNewTab(other) }
+                        if context != AppModel.viewerContext {
+                            Button("Show in Viewer") {
+                                model.showInViewer(other.id) { openWindow(id: AppModel.viewerWindowID) }
+                            }
+                        }
+                        Divider()
+                        Button("Open in Mail") { model.openInMail([other.id]) }
+                        Button("Copy Filename") { model.copyFilenames([other.id]) }
+                    }
                 } else {
                     details(entry, other, isCurrent: isCurrent)
                 }

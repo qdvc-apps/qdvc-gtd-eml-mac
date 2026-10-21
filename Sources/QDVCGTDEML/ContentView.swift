@@ -35,12 +35,16 @@ struct ContentView: View {
             }
         }
         .quickLookPreview($model.quickLookURL)
-        .sheet(item: $model.activeSheet) { sheet in
+        // Only sheets and alerts asked for while the viewer was key; those
+        // for a message window appear there.
+        .sheet(item: Binding(get: { model.sheetContext == AppModel.viewerContext ? model.activeSheet : nil },
+                             set: { model.activeSheet = $0 })) { sheet in
             SheetContent(sheet: sheet)
                 .environment(model)
         }
         .alert(model.alert?.title ?? "",
-               isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
+               isPresented: Binding(get: { model.alert != nil && model.alertContext == AppModel.viewerContext },
+                                    set: { if !$0 { model.alert = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(model.alert?.message ?? "")
@@ -48,6 +52,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.appBecameActive()
         }
+        .background(WindowAccessor { model.attachViewerWindow($0) })
     }
 }
 
@@ -233,8 +238,9 @@ struct Banner: View {
     }
 }
 
-/// Picks the view for the sheet that is open.
-private struct SheetContent: View {
+/// Picks the view for the sheet that is open (in the viewer or a message
+/// window).
+struct SheetContent: View {
     let sheet: ActiveSheet
 
     var body: some View {

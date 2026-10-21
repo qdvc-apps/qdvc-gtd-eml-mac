@@ -89,8 +89,9 @@ also writes `build/icon-preview.png`.
 The app (`QDVCGTDEML`): `GTDApp` (scenes), `AppModel` (all state and actions,
 `@Observable`), `Commands` (menus and shortcuts), `ContentView` (window,
 toolbar, banners, sheets, alerts, welcome screen), `SidebarView`,
-`MessageListView`, `ReadingPane` (pills, annotations card, history card,
-workflow trail, thread), `DashboardView`, `PerformanceView` (Swift Charts), `CalendarView`
+`MessageListView`, `ReadingPane` (`MessageDetail`: pills, annotations card,
+history card, workflow trail, thread), `Tabs` (message windows, their
+native tabbing, the focused-window value the menus act on), `DashboardView`, `PerformanceView` (Swift Charts), `CalendarView`
 (month heatmap), `Sheets` (Close
 With, Review Date Stamps, Check Metadata), `SettingsView`, `Prefs`,
 `DateFormatting`, `Platform`.

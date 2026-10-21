@@ -209,10 +209,14 @@ struct MessageRow: View {
 /// Right-click actions for the selected rows.
 struct MessageContextMenu: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     let ids: [String]
 
     var body: some View {
         let single = ids.count == 1 ? model.record(ids.first) : nil
+        Button(ids.count > 1 ? "Open in New Tabs" : "Open in New Tab") {
+            model.openInNewTab(ids) { openWindow(id: AppModel.messageWindowID, value: $0) }
+        }
         Button("Open in Mail") { model.openInMail(ids) }
         if let single {
             Button("Quick Look") { model.quickLook(single.id) }

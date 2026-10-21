@@ -19,6 +19,19 @@ enum Platform {
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
+    /// \u{2318}1\u{2026}\u{2318}9: show the nth tab of the key window's tab group
+    /// (beep when there is no such tab).
+    @MainActor
+    static func selectTab(_ n: Int) {
+        guard let key = NSApp.keyWindow else { return }
+        let windows = key.tabGroup?.windows ?? [key]
+        guard n >= 1, n <= windows.count else {
+            NSSound.beep()
+            return
+        }
+        windows[n - 1].makeKeyAndOrderFront(nil)
+    }
+
     /// Open a file in the user's default plain-text editor (`open -t`).
     static func openInTextEditor(_ url: URL) {
         let process = Process()

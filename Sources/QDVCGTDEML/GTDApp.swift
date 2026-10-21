@@ -8,7 +8,7 @@ struct GTDApp: App {
 
     var body: some Scene {
         // One main window, like Mail's viewer window.
-        Window("QDVC GTD EML", id: "main") {
+        Window("QDVC GTD EML", id: AppModel.viewerWindowID) {
             ContentView()
                 .environment(model)
                 .frame(minWidth: 960, minHeight: 560)
@@ -18,6 +18,16 @@ struct GTDApp: App {
         .commands {
             GTDCommands(model: model)
         }
+
+        // Message windows, opened as tabs of the window they were asked from
+        // (Open in New Tab); one dragged out of the tab bar is a standalone
+        // message window.
+        WindowGroup("Message", id: AppModel.messageWindowID, for: MessageRef.self) { $ref in
+            MessageWindow(ref: $ref)
+                .environment(model)
+        }
+        .defaultSize(width: 900, height: 760)
+        .commandsRemoved()
 
         Settings {
             SettingsView()

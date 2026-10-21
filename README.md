@@ -24,6 +24,10 @@ directly on the workspace, producing exactly the same files and
   the hashtag the next action of emails that have none; one that already
   has a next action is refused.
 - **Performance:** the open backlog and weekly/monthly throughput, per account.
+- **Tabs:** Open in New Tab (or ⌘-click a history link) opens an email in a
+  message window, as a native tab beside the viewer; drag it out for a
+  standalone message window. ⌘W closes a tab, ⌘⇧T reopens one, ⌘1–⌘9
+  select one.
 - **Calendar:** a month heatmap of how many emails had something happen each
   day (received, quoted, or a workflow stamp); click a day to list them.
 - Drop `.eml` files on the window to add them to Input.
