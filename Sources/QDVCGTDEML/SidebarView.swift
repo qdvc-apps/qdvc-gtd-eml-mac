@@ -132,27 +132,20 @@ struct SidebarDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         let item = self.item
-        let dragged = MainActor.assumeIsolated { () -> [String] in
-            let ids = model.draggedIDs
-            let accepted = model.dropRefusal(ids, on: item) == nil
-            model.endDrag()
-            NSCursor.arrow.set()
-            return accepted ? ids : []
-        }
-        guard !dragged.isEmpty, let provider = info.itemProviders(for: [.plainText]).first else { return false }
         let model = self.model
+        let accepted = MainActor.assumeIsolated { () -> Bool in
+            NSCursor.arrow.set()
+            return model.prepareDrop(on: item)
+        }
+        guard accepted, let provider = info.itemProviders(for: [.plainText]).first else {
+            MainActor.assumeIsolated { model.finishDrop(payload: nil) }
+            return false
+        }
+        // Only Sendable values cross into the loader's callback: the drop
+        // itself waits on the (main-actor) model.
         _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            // The payload is the row the drag started from. Acting only when
-            // it is one of the recorded rows keeps a record left by an
-            // abandoned drag from applying to text dragged in from elsewhere.
-            guard let payload = (object as? NSString) as String?, dragged.contains(payload) else { return }
-            Task { @MainActor in
-                switch item {
-                case .folder(let folder): model.move(dragged, to: folder)
-                case .hashtag(let tag): model.applyHashtag(dragged, tag: tag)
-                default: break
-                }
-            }
+            let payload = (object as? NSString).map { $0 as String }
+            Task { @MainActor in model.finishDrop(payload: payload) }
         }
         return true
     }

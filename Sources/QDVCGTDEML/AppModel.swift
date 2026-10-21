@@ -158,6 +158,8 @@ final class AppModel {
     /// starts: drop targets can only read the dragged data on drop, but need
     /// it while hovering to show whether they would accept it.
     @ObservationIgnored private(set) var draggedIDs: [String] = []
+    /// A drop waiting for its payload to load (see `prepareDrop`).
+    @ObservationIgnored private var pendingDrop: (ids: [String], item: SidebarItem)?
 
     init() {}
 
@@ -792,6 +794,34 @@ final class AppModel {
         draggedIDs = []
         dropTarget = nil
         dropHint = nil
+    }
+
+    /// A drop on `item`: end the drag and keep what it carries until the
+    /// payload has loaded. False when the drop would do nothing.
+    func prepareDrop(on item: SidebarItem) -> Bool {
+        let ids = draggedIDs
+        endDrag()
+        guard dropRefusal(ids, on: item) == nil else {
+            pendingDrop = nil
+            return false
+        }
+        pendingDrop = (ids, item)
+        return true
+    }
+
+    /// Carry out the prepared drop. The payload is the row the drag started
+    /// from: acting only when it is one of the recorded rows keeps a record
+    /// left by an abandoned drag from applying to text dragged in from
+    /// elsewhere.
+    func finishDrop(payload: String?) {
+        guard let drop = pendingDrop else { return }
+        pendingDrop = nil
+        guard let payload, drop.ids.contains(payload) else { return }
+        switch drop.item {
+        case .folder(let folder): move(drop.ids, to: folder)
+        case .hashtag(let tag): applyHashtag(drop.ids, tag: tag)
+        default: break
+        }
     }
 
     /// Why an email cannot take a hashtag as its next action, or nil.

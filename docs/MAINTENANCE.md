@@ -30,6 +30,30 @@ is declared on macOS only (see `Package.swift`). Yams (from 5.1.0) is the only
 dependency, used to read `workspace.yml`. Commit `Package.resolved` after the
 first build so everyone gets the same Yams.
 
+### 1.0 Toolchain
+
+Build with full Xcode. From Xcode 27, SwiftUI's `@State` is a macro whose
+implementation (the SwiftUIMacros compiler plugin) ships with Xcode, so the
+Command Line Tools or a swift.org toolchain fail with "plugin for module
+'SwiftUIMacros' not found". `scripts/build-app.sh` therefore sets
+`DEVELOPER_DIR` to the newest installed Xcode (found with Spotlight and in
+`/Applications`) when `xcode-select` points at the Command Line Tools,
+runs `xcrun swift` so that Xcode's compiler wins over any other on `PATH`,
+prints the compiler and macOS SDK versions, and warns when the SDK is older
+than 26 (no Liquid Glass). An explicit `DEVELOPER_DIR` is respected. The
+same block is used in the other QDVC macOS apps (it was taken from
+qdvc-progress-mac); keep them in step.
+
+AppKit decides on Liquid Glass from the SDK version recorded in the
+executable's `LC_BUILD_VERSION`. `swift build` records the deployment target
+there (`sdk 14.0`), so after copying the executable into the bundle the
+script rewrites that field with `vtool -set-build-version macos <minos>
+<sdk> -replace` to the SDK it built with, before signing. Check with
+`vtool -show-build`.
+
+`GTDCore` needs only a Swift toolchain (it also builds and tests on Linux),
+since it does not import SwiftUI.
+
 ### 1.1 App icon
 
 `tools/make_icon.py` writes `Resources/AppIcon.svg` and `Resources/AppIcon.icns`
@@ -138,6 +162,9 @@ the cases.
 ```
 swift test
 ```
+
+On a Mac, run it with Xcode's toolchain (`DEVELOPER_DIR`, see §1.0), since
+the package also contains the SwiftUI app target.
 
 `ParityTests` replays `Fixtures/parity.json`: header decoding, date parsing,
 slugs and filenames, HTML stripping, thread splitting, 21 whole emails (every
