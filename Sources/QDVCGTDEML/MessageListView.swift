@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import GTDCore
 
@@ -13,24 +14,34 @@ struct MessageListView: View {
             if groups.allSatisfy({ $0.records.isEmpty }) {
                 EmptyListView()
             } else {
-                List(selection: $model.selection) {
-                    ForEach(groups) { group in
-                        if group.title.isEmpty {
-                            rows(group.records)
-                        } else {
-                            Section(isExpanded: expanded(group.title)) {
+                ScrollViewReader { proxy in
+                    List(selection: $model.selection) {
+                        ForEach(groups) { group in
+                            if group.title.isEmpty {
                                 rows(group.records)
-                            } header: {
-                                Text(group.title)
+                            } else {
+                                Section(isExpanded: expanded(group.title)) {
+                                    rows(group.records)
+                                } header: {
+                                    Text(group.title)
+                                }
                             }
                         }
                     }
-                }
-                .listStyle(.inset)
-                .contextMenu(forSelectionType: String.self) { ids in
-                    MessageContextMenu(ids: order(ids))
-                } primaryAction: { ids in
-                    model.openInMail(order(ids))
+                    .listStyle(.inset)
+                    .contextMenu(forSelectionType: String.self) { ids in
+                        MessageContextMenu(ids: order(ids))
+                    } primaryAction: { ids in
+                        model.openInMail(order(ids))
+                    }
+                    .onChange(of: model.revealRequest) { _, request in
+                        guard let request else { return }
+                        // After the list has picked up a new sidebar entry or
+                        // an expanded heading.
+                        DispatchQueue.main.async {
+                            withAnimation { proxy.scrollTo(request.id, anchor: .center) }
+                        }
+                    }
                 }
             }
         }
@@ -40,7 +51,12 @@ struct MessageListView: View {
         ForEach(records) { r in
             MessageRow(record: r)
                 .tag(r.id)
-                .draggable(r.id)
+                .onDrag {
+                    // Recorded so sidebar entries can tell, while the drag
+                    // hovers over them, whether they would take it.
+                    model.beginDrag(r.id)
+                    return NSItemProvider(object: r.id as NSString)
+                }
         }
     }
 
@@ -117,6 +133,11 @@ struct MessageRow: View {
                         Image(systemName: "pin.fill").foregroundStyle(.pink).imageScale(.small)
                     }
                     Text(r.subject).lineLimit(1)
+                    let chain = model.historyChain(r)
+                    if !chain.isEmpty {
+                        Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary).imageScale(.small)
+                            .help("Part of a history chain of \(chain.count) emails linked by \u{201C}Closed with\u{201D}")
+                    }
                     if r.hasAttachments {
                         Image(systemName: "paperclip").foregroundStyle(.secondary).imageScale(.small)
                     }

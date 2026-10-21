@@ -193,4 +193,71 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(CalendarIndex.shift(Day(iso: "2026-01-01")!, by: -1).iso, "2025-12-01")
         XCTAssertEqual(CalendarIndex.monthDays(Day(iso: "2028-02-01")!).count, 29)
     }
+
+    func testCloseHistory() {
+        func node(_ name: String, _ action: String = "", epoch: Int = 0, folder: Folder = .archive) -> CloseHistory.Node {
+            CloseHistory.Node(id: folder.rawValue + "/" + name, filename: name, nextAction: action, epoch: epoch)
+        }
+        XCTAssertEqual(CloseHistory.closingReference("Closed with b.eml"), "b.eml")
+        XCTAssertEqual(CloseHistory.closingReference("  closed with B.EML, see notes"), "B.EML")
+        XCTAssertEqual(CloseHistory.closingReference("Closed with 2026-09-20-re-contract.eml."), "2026-09-20-re-contract.eml")
+        XCTAssertNil(CloseHistory.closingReference("Closed with b.emlx"))
+        XCTAssertNil(CloseHistory.closingReference("Closed with Bob on the phone"))
+        XCTAssertNil(CloseHistory.closingReference("Check whether it was closed with b.eml"))
+
+        // a -> c, b -> c, c -> d (open), plus an unrelated email.
+        let history = CloseHistory(nodes: [
+            node("b.eml", "Closed with c.eml", epoch: 20),
+            node("a.eml", "Closed with c.eml", epoch: 10),
+            node("c.eml", "Closed with D.eml", epoch: 30),
+            node("d.eml", "Reply to Jane #urgent", epoch: 40, folder: .actionable),
+            node("e.eml", "", epoch: 5, folder: .triage),
+        ])
+        let chain = history.chain(for: "03-actionable/d.eml")
+        XCTAssertEqual(chain.map(\.filename), ["a.eml", "b.eml", "c.eml", "d.eml"])
+        XCTAssertEqual(chain.map(\.closedBy), ["06-archive/c.eml", "06-archive/c.eml", "03-actionable/d.eml", nil])
+        XCTAssertEqual(history.chain(for: "06-archive/a.eml"), chain)
+        XCTAssertFalse(history.isInChain("02-triage/e.eml"))
+        XCTAssertTrue(history.chain(for: "02-triage/e.eml").isEmpty)
+
+        // A missing closer stays in the chain; a self-reference is no link;
+        // a loop still lists every email once.
+        let odd = CloseHistory(nodes: [
+            node("x.eml", "Closed with gone.eml"),
+            node("y.eml", "Closed with y.eml"),
+            node("p.eml", "Closed with q.eml", epoch: 2),
+            node("q.eml", "Closed with p.eml", epoch: 1),
+        ])
+        let missing = odd.chain(for: "06-archive/x.eml")
+        XCTAssertEqual(missing.map(\.filename), ["x.eml", "gone.eml"])
+        XCTAssertEqual(missing.map(\.isMissing), [false, true])
+        XCTAssertNil(missing.last?.recordID)
+        XCTAssertFalse(odd.isInChain("06-archive/y.eml"))
+        XCTAssertEqual(odd.chain(for: "06-archive/p.eml").map(\.filename), ["q.eml", "p.eml"])
+    }
+
+    func testSetNextActionIfBlank() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("gtd-tag-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = Workspace(root: root)
+        ws.today = { Day(iso: "2026-09-30")! }
+        try ws.ensureFolders()
+        for subject in ["One", "Two"] {
+            try Data("From: x@example.com\nSubject: \(subject)\nDate: Wed, 30 Sep 2026 09:00:00 +0000\n\nHi\n".utf8)
+                .write(to: ws.url(.input, "\(subject).eml"))
+        }
+        try ws.ingest(maxFilenameChars: 60)
+        try ws.setFields("2026-09-30-one.eml", ["next_action": "  "])
+        try ws.setFields("2026-09-30-two.eml", ["next_action": "Call Bob"])
+
+        XCTAssertNil(ws.nextActionRefusal("2026-09-30-one.eml"))
+        try ws.setNextActionIfBlank("2026-09-30-one.eml", "#urgent")
+        XCTAssertEqual(ws.loadMetadata()["2026-09-30-one.eml"]?["next_action"], "#urgent")
+
+        XCTAssertThrowsError(try ws.setNextActionIfBlank("2026-09-30-two.eml", "#urgent")) { error in
+            XCTAssertTrue((error as? GTDError)?.message.contains("already has a next action (Call Bob)") ?? false)
+        }
+        XCTAssertEqual(ws.loadMetadata()["2026-09-30-two.eml"]?["next_action"], "Call Bob")
+        XCTAssertThrowsError(try ws.setNextActionIfBlank("nope.eml", "#urgent"))
+    }
 }

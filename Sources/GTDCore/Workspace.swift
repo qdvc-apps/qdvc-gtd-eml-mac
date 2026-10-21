@@ -292,6 +292,25 @@ public final class Workspace {
         return warnings
     }
 
+    /// Why `setNextActionIfBlank` would refuse, without doing anything.
+    public func nextActionRefusal(_ filename: String, metadata: [String: Metadata.Row]? = nil) -> GTDError? {
+        guard let found = find(filename) else { return notFound(filename) }
+        let current = ((metadata ?? loadMetadata())[found.name]?["next_action"] ?? "").pyStrip
+        if !current.isEmpty {
+            return GTDError("'\(found.name)' already has a next action (\(current)); refusing to replace it.")
+        }
+        return nil
+    }
+
+    /// Set `next_action` only when it is blank (empty or whitespace), as a
+    /// drop on a hashtag mailbox does. Checks metadata.csv as it is on disk
+    /// now, so a next action set elsewhere since the last load is kept.
+    public func setNextActionIfBlank(_ filename: String, _ value: String) throws {
+        let name = try locate(filename).name
+        if let refusal = nextActionRefusal(name) { throw refusal }
+        try setFields(name, ["next_action": value])
+    }
+
     // MARK: metadata_check
 
     static let emlInText = Rx("\\S+\\.eml", [.caseInsensitive])

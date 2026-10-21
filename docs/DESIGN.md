@@ -90,14 +90,35 @@ Same order as the web UI, because annotations are the point of a GTD system:
    the CLI allows free text), Flags, and Notes. Edit (⌘E) turns the card
    into a form in place; Save (Return) writes only the fields that changed,
    Cancel (Esc) discards.
-4. **Workflow trail** (`ds_*` stamps) and the email's metrics, in a
+4. **History** (only for an email in a history chain, §2.3).
+5. **Workflow trail** (`ds_*` stamps) and the email's metrics, in a
    disclosure group.
-5. **Message history:** the thread split into collapsible blocks, each with
+6. **Message history:** the thread split into collapsible blocks, each with
    its own From / To / Date and attachments, nested quotes indented and
    collapsed, exactly as the web UI does.
 
 Bodies are rendered as plain text (HTML parts converted to text), for the
 same reason as the web UI: no remote content, no sender markup.
+
+### 2.3 History chains
+
+`close … with …` sets an email's next action to `Closed with <file>.eml`.
+Used repeatedly, this links emails into a chain: A closed with B, B closed
+with C, and so on; several emails can be closed with the same one, so a
+chain can branch. An email in a chain shows a *History · n* pill, a
+`clock.arrow.circlepath` glyph next to its subject in the list, and a
+History card: a timeline of the whole chain, each email before the one that
+closed it (emails closed by the same one in date order), ending with the
+latest. "n of m" gives the email's place in it. Clicking an email selects
+it, switching the list to its folder when the list on show does not include
+it, as jumping to a message does in Mail. Where the chain branches, a row
+names the email that closed it. A reference to a file that is no longer in
+the workspace stays in the chain, marked as missing.
+
+A reference is recognised when the next action starts with "Closed with"
+(any case) followed by a name ending in `.eml`, as `close` writes it; text
+after the name is allowed. It resolves as `find` would: the first folder in
+workflow order, an exact name first and then a case-insensitive one.
 
 ## 3. Actions (the CLI, as Mail-style commands)
 
@@ -118,8 +139,18 @@ same reason as the web UI: no remote content, no sender markup.
 Also:
 
 - **Drag and drop:** dragging messages onto a Workflow folder in the sidebar
-  is `alloc`, as dragging to a mailbox is in Mail. Dropping `.eml` files from
-  Finder or Mail onto the window copies them into `01-input`.
+  is `alloc`, as dragging to a mailbox is in Mail. Dragging them onto a
+  hashtag Smart Mailbox makes the hashtag the next action (`metadata set
+  next_action`) of each email whose next action is blank; an email that
+  already has one is left alone, since the drop would otherwise overwrite
+  it. The answer is given while hovering, as the HIG asks: a destination
+  that would refuse every dragged email is not highlighted, shows the
+  "operation not allowed" pointer, and says why in the window subtitle, so
+  there is no alert to dismiss afterwards. A drop that some of the emails
+  refuse is applied to the others, and the rest are listed in an alert, as
+  for a partly refused move. The same hover check applies to folders.
+  Dropping `.eml` files from Finder or Mail onto the window copies them
+  into `01-input`.
 - **Go to folder:** ⌘1 – ⌘6 select the six Workflow folders, as ⌘1… select
   favourite mailboxes in Mail. ⌘0 is the Dashboard, ⌘7 Performance and ⌘8
   the Calendar.
@@ -147,6 +178,11 @@ Also:
   `max_filename_chars`), with buttons to open it in a text editor and reload
   it. These settings belong to the workspace so that the CLI and the app
   agree; see [WORKSPACE_CONFIG_REQUEST.md](WORKSPACE_CONFIG_REQUEST.md).
+
+The Settings window closes with ⌘W or its close button, like Settings
+windows in Apple's apps. Esc does not close it: on macOS, Esc cancels a
+modal dialog, sheet, menu or edit, and a Settings window has nothing to
+cancel because every change applies at once.
 
 Appearance (light/dark) follows the system, as native apps do; the web UI's
 Warm/Neutral tone and font-stack overrides have no Mac equivalent and are

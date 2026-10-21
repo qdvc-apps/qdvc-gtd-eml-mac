@@ -50,9 +50,14 @@ private struct GeneralSettings: View {
             } header: {
                 Text("On the radar")
             } footer: {
+                // Wrapped within a set width: as one line it was wider than
+                // the window, which widened the whole form and cut off the
+                // start of the longest label.
                 Text("Smart Mailboxes only list emails in these folders. Inbox and Sent always cover every folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 260, alignment: .leading)
             }
 
             Toggle("Reopen the last workspace at launch", isOn: $model.reopenLast)

@@ -57,12 +57,13 @@ frosted-glass envelope, sealed with a green check mark, in a sage palette.
 | `Metrics.swift` | autofix planning, status and `ttS`/`Td`/`Wd`/`tttR`, backlog, histogram, flow series | `metrics.py`, `dashboard.py` |
 | `Records.swift` | `EmailRecord`, Dashboard `Overview`, list date buckets, the cached loader | `site.py` |
 | `Calendar.swift` | events per day (Date headers, quoted dates, ds_* stamps) for the Calendar | — (Mac only) |
+| `History.swift` | the "Closed with" history chains | — (Mac only) |
 
 The app (`QDVCGTDEML`): `GTDApp` (scenes), `AppModel` (all state and actions,
 `@Observable`), `Commands` (menus and shortcuts), `ContentView` (window,
 toolbar, banners, sheets, alerts, welcome screen), `SidebarView`,
-`MessageListView`, `ReadingPane` (pills, annotations card, workflow trail,
-thread), `DashboardView`, `PerformanceView` (Swift Charts), `CalendarView`
+`MessageListView`, `ReadingPane` (pills, annotations card, history card,
+workflow trail, thread), `DashboardView`, `PerformanceView` (Swift Charts), `CalendarView`
 (month heatmap), `Sheets` (Close
 With, Review Date Stamps, Check Metadata), `SettingsView`, `Prefs`,
 `DateFormatting`, `Platform`.
@@ -125,6 +126,10 @@ the cases.
   ignored (Python would fail to find the first column).
 - **Performance** shows only the open backlog and throughput sections.
 - **Calendar** is new in the Mac app (no CLI equivalent); it only reads.
+- **History chains** are new in the Mac app; they only read `next_action`.
+- **Dropping on a hashtag mailbox** writes `next_action` only when it is
+  blank, re-reading `metadata.csv` just before writing
+  (`Workspace.setNextActionIfBlank`); the CLI's `metadata set` overwrites.
 - **Dates in the list** are Mail-style (time today, Yesterday, weekday,
   then a compact date); the headings follow the design's buckets.
 
@@ -141,7 +146,8 @@ metrics, backlog and flow series, and a scripted CLI session (ingest, alloc
 including refusals, metadata set, pin/unpin, close, metadata check, autofix)
 compared file-by-file and byte-for-byte with `metadata.csv`. `CoreTests`
 covers pieces the fixture does not (config parsing, dates, buckets,
-import/load).
+import/load, the calendar index, history chains, setting a blank next
+action).
 
 To regenerate the fixture after a change in the Python edition:
 

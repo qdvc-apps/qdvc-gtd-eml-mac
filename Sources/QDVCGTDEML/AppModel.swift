@@ -37,6 +37,13 @@ enum SortKey: String, CaseIterable, Identifiable {
     }
 }
 
+/// A request for the message list to scroll a row into view (a new token
+/// each time, so asking twice for the same row scrolls twice).
+struct RevealRequest: Equatable {
+    let id: String
+    let token = UUID()
+}
+
 struct AlertInfo: Identifiable {
     let id = UUID()
     var title: String
@@ -80,6 +87,8 @@ final class AppModel {
     /// Events per day for the Calendar (rebuilt on load and when the date
     /// settings change).
     private(set) var calendarIndex = CalendarIndex(days: [:])
+    /// The "Closed with" history chains (rebuilt on load).
+    private(set) var history = CloseHistory.empty
     /// The first day of the month the Calendar shows.
     var calendarMonth: Day = {
         let t = Day.today()
@@ -106,6 +115,13 @@ final class AppModel {
     var activeSheet: ActiveSheet?
     var alert: AlertInfo?
     var quickLookURL: URL?
+    /// Set by `reveal` for the message list to scroll to.
+    var revealRequest: RevealRequest?
+    /// The sidebar entry a drag is over, for its drop highlight.
+    var dropTarget: SidebarItem?
+    /// Why the sidebar entry under a drag won't take it (shown as the
+    /// window subtitle while hovering).
+    var dropHint: String?
     /// The record whose annotations card is in edit mode.
     var editingAnnotationsID: String?
     private(set) var recentWorkspaces: [String] = Prefs.recentWorkspaces
@@ -138,6 +154,10 @@ final class AppModel {
     @ObservationIgnored private var hasLoaded = false
     /// Selected after a reload when the selection has left the list.
     @ObservationIgnored private var fallbackSelection: String?
+    /// The rows a drag from the message list carries, recorded when it
+    /// starts: drop targets can only read the dragged data on drop, but need
+    /// it while hovering to show whether they would accept it.
+    @ObservationIgnored private(set) var draggedIDs: [String] = []
 
     init() {}
 
@@ -155,6 +175,7 @@ final class AppModel {
 
     var statusLine: String {
         guard workspace != nil else { return "" }
+        if let dropHint { return dropHint }
         if let statusMessage { return statusMessage }
         let input = overview.counts[.input] ?? 0
         var parts = ["\(overview.total) emails"]
@@ -278,7 +299,7 @@ final class AppModel {
         let today = fmt.today
         var groups: [ListGroup] = []
         for r in list {
-            let title = DateBucket.title(for: fmt.day(r.date.date), today: today, monthName: DateFormatting.monthName)
+            let title = groupTitle(r, fmt: fmt, today: today)
             if groups.last?.title == title {
                 groups[groups.count - 1].records.append(r)
             } else {
@@ -286,6 +307,10 @@ final class AppModel {
             }
         }
         return groups
+    }
+
+    private func groupTitle(_ r: EmailRecord, fmt: DateFormatting, today: Day) -> String {
+        DateBucket.title(for: fmt.day(r.date.date), today: today, monthName: DateFormatting.monthName)
     }
 
     var listTitle: String {
@@ -398,6 +423,7 @@ final class AppModel {
         recordsByID = [:]
         metrics = []
         overview = Overview([])
+        history = .empty
         selection = []
         Prefs.lastWorkspace = nil
     }
@@ -459,6 +485,7 @@ final class AppModel {
         autofix = snapshot.autofix
         metadataRows = snapshot.metadataRows
         overview = Overview(snapshot.records)
+        history = CloseHistory(snapshot.records)
         rebuildCalendar()
         isLoading = false
         hasLoaded = true
@@ -722,6 +749,115 @@ final class AppModel {
             fail("Could Not Reconcile metadata.csv", error)
         }
         reload()
+    }
+
+    // MARK: History chains
+
+    /// The "Closed with" chain the email belongs to (empty if none).
+    func historyChain(_ r: EmailRecord) -> [CloseHistory.Entry] { history.chain(for: r.id) }
+
+    /// Select an email and scroll it into view, switching to its folder when
+    /// the list on show does not include it (as jumping to a message does
+    /// in Mail).
+    func reveal(_ id: String) {
+        guard let r = record(id) else { return }
+        if !visibleRecords.contains(where: { $0.id == id }) {
+            searchText = ""
+            let listed = sidebarSelection.map { item in item.isMailbox && members(of: item).contains { $0.id == id } }
+            if listed != true { sidebarSelection = .folder(r.folder) }
+        }
+        if showDateHeadings && sortKey == .date {
+            let fmt = dates
+            collapsedGroups.remove(groupTitle(r, fmt: fmt, today: fmt.today))
+        }
+        selection = [id]
+        revealRequest = RevealRequest(id: id)
+    }
+
+    // MARK: Dragging to the sidebar
+
+    /// What dragging `id` carries: the whole selection when the row is
+    /// selected, else that row alone (Mail's rule).
+    func dragTargets(for id: String) -> [String] {
+        guard recordsByID[id] != nil else { return [] }
+        if selection.contains(id) { return selectedRecords.map(\.id) }
+        return [id]
+    }
+
+    func beginDrag(_ id: String) {
+        draggedIDs = dragTargets(for: id)
+    }
+
+    func endDrag() {
+        draggedIDs = []
+        dropTarget = nil
+        dropHint = nil
+    }
+
+    /// Why an email cannot take a hashtag as its next action, or nil.
+    func tagRefusal(_ r: EmailRecord) -> String? {
+        if let refusal = annotationsRefusal(r) { return refusal }
+        if !r.nextAction.isEmpty { return "It already has a next action: \u{201C}\(r.nextAction)\u{201D}." }
+        return nil
+    }
+
+    /// Why dropping `ids` on a sidebar entry would do nothing, or nil when at
+    /// least one of them would be moved or tagged.
+    func dropRefusal(_ ids: [String], on item: SidebarItem) -> String? {
+        let targets = ids.compactMap { record($0) }
+        guard !targets.isEmpty else { return "" }
+        switch item {
+        case .folder(let folder):
+            if targets.contains(where: { moveRefusal($0, to: folder) == nil }) { return nil }
+            if targets.count == 1, let reason = moveRefusal(targets[0], to: folder), reason != "Already here" {
+                return "Cannot move to \(folder.title): \(reason)"
+            }
+            return targets.count == 1 ? "" : "None of these emails can be moved to \(folder.title)."
+        case .hashtag(let tag):
+            if targets.contains(where: { tagRefusal($0) == nil }) { return nil }
+            if targets.count == 1, let reason = tagRefusal(targets[0]) {
+                return "Cannot set the next action to \(tag). \(reason)"
+            }
+            return targets.allSatisfy({ !$0.nextAction.isEmpty })
+                ? "Cannot set the next action to \(tag): every one of these emails already has a next action."
+                : "Cannot set the next action to \(tag): each of these emails already has a next action or is still in Input."
+        default:
+            return ""
+        }
+    }
+
+    /// A drop on a hashtag mailbox: the tag becomes the next action of each
+    /// email that has none. The others are left alone and listed.
+    func applyHashtag(_ ids: [String], tag: String) {
+        guard let ws = workspace else { return }
+        var refusals: [String] = []
+        var tagged: [EmailRecord] = []
+        for id in ids {
+            guard let r = record(id) else { continue }
+            if let reason = tagRefusal(r) {
+                refusals.append("\u{201C}\(r.subject)\u{201D}: \(reason)")
+                continue
+            }
+            do {
+                try ws.setNextActionIfBlank(r.filename, tag)
+                tagged.append(r)
+            } catch {
+                refusals.append(error.localizedDescription)
+            }
+        }
+        if !tagged.isEmpty {
+            var message = "Set the next action of \(tagged.count) email\(tagged.count == 1 ? "" : "s") to \(tag)."
+            let offRadar = tagged.filter { !isOnRadar($0) }.count
+            if offRadar > 0 {
+                message += " \(offRadar) \(offRadar == 1 ? "is" : "are") outside the on-radar folders, so \(offRadar == 1 ? "it isn\u{2019}t" : "they aren\u{2019}t") listed there."
+            }
+            flash(message)
+        }
+        reload()
+        if !refusals.isEmpty {
+            alert = AlertInfo(title: tagged.isEmpty ? "Next Action Not Changed" : "Some Emails Were Not Changed",
+                              message: refusals.joined(separator: "\n\n"))
+        }
     }
 
     // MARK: Files

@@ -36,7 +36,7 @@ UTF-8, comma-separated, `\r\n` line endings, fields quoted only when needed
 | `eml_filename` | sync | the file name (the key) |
 | `general_notes` | Edit Annotations / `gtd metadata set` | free text, may span lines |
 | `project` | Edit Annotations | free text |
-| `next_action` | Edit Annotations; Close With writes `Closed with <file>` | free text; `#tags` are matched by the hashtag mailboxes |
+| `next_action` | Edit Annotations; Close With writes `Closed with <file>`; a drop on a hashtag mailbox writes the hashtag when blank | free text; `#tags` are matched by the hashtag mailboxes; `Closed with <file>` links emails into history chains |
 | `due_date` | Edit Annotations | `yyyy-mm-dd` (free text is allowed but cannot be compared with today) |
 | `message_ref` | ingest | the ref found in the body |
 | `flags` | Pin / Unpin, Edit Annotations | whitespace-separated tokens, e.g. `pinned` |

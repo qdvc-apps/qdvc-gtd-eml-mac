@@ -15,6 +15,10 @@ struct ReadingPane: View {
                         .textSelection(.enabled)
                     AnnotationsCard(record: r)
                         .id("annotations-\(r.id)")
+                    let chain = model.historyChain(r)
+                    if !chain.isEmpty {
+                        HistoryCard(record: r, chain: chain)
+                    }
                     WorkflowTrail(record: r)
                     Divider()
                     ThreadView(record: r)
@@ -85,6 +89,11 @@ struct PillRow: View {
                      symbol: r.status == "resolved" ? "checkmark.circle" : "circle.dashed")
             }
             if r.isPinned { Pill(text: "Pinned", color: .pink, symbol: "pin.fill") }
+            let chain = model.historyChain(r)
+            if !chain.isEmpty {
+                Pill(text: "History \u{00B7} \(chain.count)", color: .indigo, symbol: "clock.arrow.circlepath")
+                    .help("Part of a chain of \(chain.count) emails linked by \u{201C}Closed with\u{201D}; see History below")
+            }
             if !r.dueDate.isEmpty {
                 Pill(text: "Due \(model.dates.isoDay(r.dueDate))",
                      color: r.isOverdue(today: model.today) ? .red : .secondary, symbol: "calendar")
@@ -273,6 +282,111 @@ struct AnnotationsCard: View {
     private func save() {
         model.saveAnnotations(record.id, ["next_action": nextAction, "project": project, "due_date": dueDate,
                                           "flags": flags, "general_notes": notes])
+    }
+}
+
+/// The "Closed with" chain this email is part of, earliest first, as a
+/// timeline. Clicking another email selects it (switching to its folder if
+/// the list on show does not include it).
+struct HistoryCard: View {
+    @Environment(AppModel.self) private var model
+    let record: EmailRecord
+    let chain: [CloseHistory.Entry]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("History", systemImage: "clock.arrow.circlepath").font(.headline)
+                Spacer()
+                Text(position).font(.callout).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(chain.enumerated()), id: \.element.id) { index, entry in
+                    row(entry, index: index)
+                }
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+    }
+
+    private var position: String {
+        let index = chain.firstIndex { $0.id == record.id }.map { $0 + 1 }
+        return index.map { "\($0) of \(chain.count)" } ?? "\(chain.count) emails"
+    }
+
+    @ViewBuilder
+    private func row(_ entry: CloseHistory.Entry, index: Int) -> some View {
+        let isCurrent = entry.id == record.id
+        let other = entry.recordID.flatMap { model.record($0) }
+        HStack(alignment: .top, spacing: 10) {
+            // The timeline: a dot per email, joined by a line.
+            VStack(spacing: 0) {
+                Rectangle().fill(index == 0 ? Color.clear : Color.secondary.opacity(0.35)).frame(width: 2, height: 7)
+                Circle()
+                    .fill(isCurrent ? Color.accentColor : (entry.isMissing ? Color.clear : Color.secondary.opacity(0.6)))
+                    .overlay(Circle().strokeBorder(entry.isMissing ? Color.orange : Color.clear, lineWidth: 1.5))
+                    .frame(width: 9, height: 9)
+                Rectangle().fill(index == chain.count - 1 ? Color.clear : Color.secondary.opacity(0.35))
+                    .frame(width: 2)
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(width: 10)
+            Group {
+                if let other, !isCurrent {
+                    Button { model.reveal(other.id) } label: { details(entry, other, isCurrent: false) }
+                        .buttonStyle(.plain)
+                        .help("Show this email (\(other.folder.title))")
+                } else {
+                    details(entry, other, isCurrent: isCurrent)
+                }
+            }
+            .padding(.bottom, index == chain.count - 1 ? 0 : 8)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private func details(_ entry: CloseHistory.Entry, _ other: EmailRecord?, isCurrent: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let other {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(other.subject)
+                        .fontWeight(isCurrent ? .semibold : .regular)
+                        .foregroundStyle(isCurrent ? Color.primary : Color.accentColor)
+                        .lineLimit(1)
+                    if isCurrent {
+                        Text("This email").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 6)
+                    Text(model.dates.list(other.date.date)).font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                }
+                Text("\(other.listCorrespondent) \u{00B7} \(other.folder.title)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Label(entry.filename, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("Not in the workspace any more").font(.caption).foregroundStyle(.secondary)
+            }
+            if let note = closedByNote(entry) {
+                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// When a chain branches, which email closed this one (it is not simply
+    /// the next in the list).
+    private func closedByNote(_ entry: CloseHistory.Entry) -> String? {
+        guard let closer = entry.closedBy, let index = chain.firstIndex(of: entry) else { return nil }
+        if index + 1 < chain.count, chain[index + 1].id == closer { return nil }
+        let name = model.record(closer)?.subject ?? chain.first { $0.id == closer }?.filename ?? closer
+        return "Closed with \u{201C}\(name)\u{201D}"
     }
 }
 

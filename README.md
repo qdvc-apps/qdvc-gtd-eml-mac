@@ -13,12 +13,15 @@ directly on the workspace, producing exactly the same files and
 - **Message list** with the next action as the preview line, age dots, account
   labels, due-date capsules and collapsible date headings.
 - **Reading pane** with editable annotations (next action, project, due
-  date, flags, notes), the workflow trail and metrics, and the thread split
-  into its quoted messages.
+  date, flags, notes), the email's history chain (emails linked by
+  "Closed with", click one to jump to it), the workflow trail and metrics,
+  and the thread split into its quoted messages.
 - **Actions:** Ingest (⇧⌘N), Move To (⌃⌘1–6 or drag to a folder), Archive
   (⌃⌘A), Close With… (⌥⌘K), Pin/Unpin (⇧⌘L), Edit Annotations (⌘E), Review
   Date Stamps… (`workflow_autofix`), Check Metadata… (`metadata_check`).
   The CLI's refusals apply, with its wording.
+- **Drag to a hashtag mailbox** to make the hashtag the next action of
+  emails that have none; one that already has a next action is refused.
 - **Performance:** the open backlog and weekly/monthly throughput, per account.
 - **Calendar:** a month heatmap of how many emails had something happen each
   day (received, quoted, or a workflow stamp); click a day to list them.
